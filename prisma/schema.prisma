@@ -1,0 +1,230 @@
+// AgentHub - Multi-Agent Team Collaboration Platform
+// Inspired by multica-ai/multica + addyosmani/agent-skills
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ WORKSPACE ============
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  context     String?  // Workspace-level agent system prompt
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   Member[]
+  agents    Agent[]
+  issues    Issue[]
+  projects  Project[]
+  skills    Skill[]
+  chatSessions ChatSession[]
+}
+
+// ============ USER & MEMBER ============
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Member[]
+}
+
+model Member {
+  id          String   @id @default(cuid())
+  role        String   @default("member") // owner, admin, member
+  userId      String
+  workspaceId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id])
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+// ============ AGENT ============
+model Agent {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  avatar      String?
+  provider    String   @default("claude") // claude, codex, openai, gemini, custom
+  instructions String? // System prompt for the agent
+  status      String   @default("idle") // idle, working, blocked, error, offline
+  maxConcurrent Int    @default(3)
+  visibility  String   @default("workspace") // workspace, private
+  customEnv   String?  // JSON string of env vars
+  customArgs  String?  // JSON string of CLI args
+  mcpConfig   String?  // JSON string of MCP server config
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  skills AgentSkill[]
+  tasks  AgentTask[]
+}
+
+// ============ SKILL ============
+model Skill {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  content     String   // Markdown content
+  category    String?  // engineering, testing, review, deployment, custom
+  source      String?  // url, manual, import
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  agents AgentSkill[]
+}
+
+model AgentSkill {
+  id        String @id @default(cuid())
+  agentId   String
+  skillId   String
+  createdAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
+}
+
+// ============ ISSUE ============
+model Issue {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("backlog") // backlog, todo, in_progress, in_review, done, cancelled
+  priority    String   @default("none") // none, low, medium, high, urgent
+  order       Int      @default(0)
+  assigneeType String? // member, agent
+  assigneeId   String?
+  creatorType  String  @default("member") // member, agent
+  creatorId    String?
+  projectId    String?
+  dueDate      DateTime?
+  labels       String? // JSON array string
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id])
+
+  comments Comment[]
+  tasks    AgentTask[]
+
+  activity ActivityLog[]
+}
+
+// ============ COMMENT ============
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  authorType String  @default("member") // member, agent
+  authorId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  issueId String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+// ============ AGENT TASK ============
+model AgentTask {
+  id          String   @id @default(cuid())
+  status      String   @default("queued") // queued, dispatched, running, completed, failed, cancelled
+  output      String?  // Agent output / response
+  tokensUsed  Int      @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  issueId String?
+  issue   Issue?  @relation(fields: [issueId], references: [id])
+
+  chatSessionId String?
+  chatSession   ChatSession? @relation(fields: [chatSessionId], references: [id])
+}
+
+// ============ PROJECT ============
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  status      String   @default("planned") // planned, in_progress, paused, completed, cancelled
+  priority    String   @default("none")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  issues Issue[]
+}
+
+// ============ CHAT SESSION ============
+model ChatSession {
+  id          String   @id @default(cuid())
+  title       String?
+  agentId     String?
+  unreadCount Int      @default(0)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  messages ChatMessage[]
+  tasks    AgentTask[]
+}
+
+// ============ CHAT MESSAGE ============
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String   // user, agent, system
+  content   String
+  createdAt DateTime @default(now())
+
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// ============ ACTIVITY LOG ============
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String   // created, updated, assigned, commented, status_changed, etc.
+  entityType  String   // issue, agent, comment, project
+  entityId    String
+  actorType   String?  // member, agent, system
+  actorId     String?
+  metadata    String?  // JSON string for additional context
+  createdAt   DateTime @default(now())
+
+  issueId String?
+  issue   Issue?  @relation(fields: [issueId], references: [id])
+}
