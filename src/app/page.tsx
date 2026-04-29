@@ -49,14 +49,17 @@ const NAV_KEYS: Exclude<ViewType, 'settings'>[] = [
   'patterns',
 ]
 
-const NAV_LABEL_KEYS: Record<Exclude<ViewType, 'settings'>, string> = {
-  dashboard: 'nav.dashboard',
-  agents: 'nav.agents',
-  issues: 'nav.issues',
-  skills: 'nav.skills',
-  projects: 'nav.projects',
-  chat: 'nav.chat',
-  patterns: 'nav.patterns',
+const getNavLabel = (key: Exclude<ViewType, 'settings'>, t: any): string => {
+  switch (key) {
+    case 'dashboard': return t.nav.dashboard
+    case 'agents': return t.nav.agents
+    case 'issues': return t.nav.issues
+    case 'skills': return t.nav.skills
+    case 'projects': return t.nav.projects
+    case 'chat': return t.nav.chat
+    case 'patterns': return t.nav.patterns
+    default: return key
+  }
 }
 
 // ==================== Main App Content ====================
@@ -190,7 +193,7 @@ function AppContent() {
         <nav className="flex-1 p-2 space-y-0.5">
           {NAV_KEYS.map((key) => {
             const isActive = activeView === key
-            const label = t[NAV_LABEL_KEYS[key] as keyof typeof t] as string
+            const label = getNavLabel(key, t)
             return (
               <Button
                 key={key}
@@ -268,7 +271,7 @@ function AppContent() {
         <nav className="flex-1 p-2 space-y-0.5">
           {NAV_KEYS.map((key) => {
             const isActive = activeView === key
-            const label = t[NAV_LABEL_KEYS[key] as keyof typeof t] as string
+            const label = getNavLabel(key, t)
             return (
               <Button
                 key={key}

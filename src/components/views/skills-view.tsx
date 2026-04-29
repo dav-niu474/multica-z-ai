@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Wrench,
+  Zap,
   TestTubes,
   ShieldCheck,
   Rocket,
@@ -76,6 +77,7 @@ export function SkillsView({ workspaceId }: SkillsViewProps) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
+  const [filterType, setFilterType] = useState<'all' | 'skill' | 'tool'>('all')
 
   // Form dialog state
   const [formOpen, setFormOpen] = useState(false)
@@ -127,7 +129,9 @@ export function SkillsView({ workspaceId }: SkillsViewProps) {
       skill.description?.toLowerCase().includes(search.toLowerCase())
     const matchesCategory =
       filterCategory === 'all' || skill.category === filterCategory
-    return matchesSearch && matchesCategory
+    const matchesType =
+      filterType === 'all' || skill.type === filterType
+    return matchesSearch && matchesCategory && matchesType
   })
 
   // Submit handler
@@ -135,6 +139,7 @@ export function SkillsView({ workspaceId }: SkillsViewProps) {
     name: string
     description: string
     content: string
+    type: 'skill' | 'tool'
     category: SkillCategory | null
     source: string
     workspaceId: string
@@ -313,6 +318,26 @@ export function SkillsView({ workspaceId }: SkillsViewProps) {
             className="pl-9"
           />
         </div>
+        <Select value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
+          <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="skill">
+              <span className="flex items-center gap-1.5">
+                <Zap className="size-3.5 text-amber-500" />
+                Skills
+              </span>
+            </SelectItem>
+            <SelectItem value="tool">
+              <span className="flex items-center gap-1.5">
+                <Wrench className="size-3.5 text-emerald-500" />
+                Tools
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={filterCategory} onValueChange={setFilterCategory}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Category" />
@@ -454,14 +479,31 @@ export function SkillsView({ workspaceId }: SkillsViewProps) {
                 </CardHeader>
 
                 <CardContent className="px-4 pb-4 flex flex-col gap-3">
-                  {cat && (
+                  {/* Type and Category badges */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge
                       variant="secondary"
-                      className={`text-xs w-fit ${SKILL_CATEGORY_COLORS[cat]}`}
+                      className={`text-xs ${
+                        skill.type === 'tool'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                      }`}
                     >
-                      {SKILL_CATEGORY_LABELS[cat]}
+                      {skill.type === 'tool' ? (
+                        <span className="flex items-center gap-1"><Wrench className="size-3" /> Tool</span>
+                      ) : (
+                        <span className="flex items-center gap-1"><Zap className="size-3" /> Skill</span>
+                      )}
                     </Badge>
-                  )}
+                    {cat && (
+                      <Badge
+                        variant="secondary"
+                        className={`text-xs ${SKILL_CATEGORY_COLORS[cat]}`}
+                      >
+                        {SKILL_CATEGORY_LABELS[cat]}
+                      </Badge>
+                    )}
+                  </div>
 
                   {preview && (
                     <p className="text-xs text-muted-foreground line-clamp-2">

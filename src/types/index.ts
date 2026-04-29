@@ -74,6 +74,7 @@ export interface Skill extends BaseRecord {
   name: string
   description: string | null
   content: string
+  type: 'skill' | 'tool'
   category: SkillCategory | null
   source: string | null
   workspaceId: string

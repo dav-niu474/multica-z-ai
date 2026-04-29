@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,23 @@ export function ProjectFormDialog({
   const [status, setStatus] = useState<string>(project?.status ?? 'planned')
   const [priority, setPriority] = useState<string>(project?.priority ?? 'none')
   const [submitting, setSubmitting] = useState(false)
+
+  // Sync form when project prop changes (critical for edit mode)
+  useEffect(() => {
+    if (project) {
+      setName(project.name ?? '')
+      setDescription(project.description ?? '')
+      setIcon(project.icon ?? '📁')
+      setStatus(project.status ?? 'planned')
+      setPriority(project.priority ?? 'none')
+    } else {
+      setName('')
+      setDescription('')
+      setIcon('📁')
+      setStatus('planned')
+      setPriority('none')
+    }
+  }, [project])
 
   const resetForm = () => {
     setName('')

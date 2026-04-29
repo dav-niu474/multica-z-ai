@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, description, content, category, source, workspaceId } = body
+    const { name, description, content, type, category, source, workspaceId } = body
 
     if (!name || !content || !workspaceId) {
       return NextResponse.json(
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         content,
+        type: type || 'skill',
         category: category || null,
         source: source || null,
         workspaceId,

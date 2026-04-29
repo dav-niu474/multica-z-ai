@@ -84,6 +84,7 @@ model Skill {
   name        String
   description String?
   content     String
+  type        String   @default("skill")  // "skill" or "tool"
   category    String?
   source      String?
   createdAt   DateTime @default(now())

@@ -43,7 +43,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { name, description, content, category, source } = body
+    const { name, description, content, type, category, source } = body
 
     const skill = await db().skill.update({
       where: { id },
@@ -51,6 +51,7 @@ export async function PUT(
         ...(name !== undefined ? { name } : {}),
         ...(description !== undefined ? { description: description || null } : {}),
         ...(content !== undefined ? { content } : {}),
+        ...(type !== undefined ? { type: type || 'skill' } : {}),
         ...(category !== undefined ? { category: category || null } : {}),
         ...(source !== undefined ? { source: source || null } : {}),
       },

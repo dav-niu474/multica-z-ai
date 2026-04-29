@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Zap, Wrench } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ interface SkillFormDialogProps {
     name: string
     description: string
     content: string
+    type: 'skill' | 'tool'
     category: SkillCategory | null
     source: string
     workspaceId: string
@@ -61,14 +63,35 @@ export function SkillFormDialog({
   const [name, setName] = useState(skill?.name ?? '')
   const [description, setDescription] = useState(skill?.description ?? '')
   const [content, setContent] = useState(skill?.content ?? '')
+  const [type, setType] = useState<string>(skill?.type ?? 'skill')
   const [category, setCategory] = useState<string>(skill?.category ?? 'engineering')
   const [source, setSource] = useState(skill?.source ?? 'manual')
   const [submitting, setSubmitting] = useState(false)
+
+  // Sync form when skill prop changes (critical for edit mode)
+  useEffect(() => {
+    if (skill) {
+      setName(skill.name ?? '')
+      setDescription(skill.description ?? '')
+      setContent(skill.content ?? '')
+      setType(skill.type ?? 'skill')
+      setCategory(skill.category ?? 'engineering')
+      setSource(skill.source ?? 'manual')
+    } else {
+      setName('')
+      setDescription('')
+      setContent('')
+      setType('skill')
+      setCategory('engineering')
+      setSource('manual')
+    }
+  }, [skill])
 
   const resetForm = () => {
     setName('')
     setDescription('')
     setContent('')
+    setType('skill')
     setCategory('engineering')
     setSource('manual')
   }
@@ -83,6 +106,7 @@ export function SkillFormDialog({
         name: name.trim(),
         description: description.trim(),
         content: content.trim(),
+        type: (type as 'skill' | 'tool') || 'skill',
         category: (category as SkillCategory) || null,
         source: source || 'manual',
         workspaceId,
@@ -115,7 +139,7 @@ export function SkillFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="skill-name">
                 Name <span className="text-destructive">*</span>
@@ -127,6 +151,28 @@ export function SkillFormDialog({
                 onChange={(e) => setName(e.target.value)}
                 required
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="skill-type">Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger id="skill-type" className="w-full">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skill">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="size-3.5 text-amber-500" />
+                      Skill (技能)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="tool">
+                    <span className="flex items-center gap-1.5">
+                      <Wrench className="size-3.5 text-emerald-500" />
+                      Tool (工具)
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="skill-category">Category</Label>

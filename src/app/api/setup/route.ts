@@ -50,7 +50,8 @@ const CREATE_TABLES_SQL = [
   )`,
   `CREATE TABLE IF NOT EXISTS "Skill" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "content" TEXT NOT NULL,
-    "category" TEXT, "source" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "type" TEXT NOT NULL DEFAULT 'skill', "category" TEXT, "source" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Skill_pkey" PRIMARY KEY ("id")
   )`,
@@ -164,11 +165,11 @@ async function seedDemoData(d: ReturnType<typeof db>) {
   ])
 
   const [s1, s2, s3, s4, s5] = await Promise.all([
-    d.skill.create({ data: { name: 'Code Review', category: 'review', content: '# Code Review\n\n- Correctness\n- Readability\n- Performance\n- Security', workspaceId: workspace.id } }),
-    d.skill.create({ data: { name: 'TDD', category: 'testing', content: '# TDD\n\n1. Red: Write failing test\n2. Green: Make it pass\n3. Refactor', workspaceId: workspace.id } }),
-    d.skill.create({ data: { name: 'Security Audit', category: 'review', content: '# Security\n\n- XSS prevention\n- SQL Injection\n- CSRF', workspaceId: workspace.id } }),
-    d.skill.create({ data: { name: 'API Design', category: 'engineering', content: '# API Design\n\n- RESTful conventions\n- HTTP methods\n- Error format', workspaceId: workspace.id } }),
-    d.skill.create({ data: { name: 'Git Workflow', category: 'engineering', content: '# Git\n\n- Conventional commits\n- Feature branches\n- PR review', workspaceId: workspace.id } }),
+    d.skill.create({ data: { name: 'Code Review', type: 'skill', category: 'review', content: '# Code Review\n\n- Correctness\n- Readability\n- Performance\n- Security', workspaceId: workspace.id } }),
+    d.skill.create({ data: { name: 'TDD', type: 'skill', category: 'testing', content: '# TDD\n\n1. Red: Write failing test\n2. Green: Make it pass\n3. Refactor', workspaceId: workspace.id } }),
+    d.skill.create({ data: { name: 'Security Audit', type: 'skill', category: 'security', content: '# Security\n\n- XSS prevention\n- SQL Injection\n- CSRF\n- Input validation', workspaceId: workspace.id } }),
+    d.skill.create({ data: { name: 'API Design', type: 'tool', category: 'engineering', content: '# API Design Tool\n\n- RESTful conventions\n- HTTP methods\n- Error format\n- OpenAPI spec generation', workspaceId: workspace.id } }),
+    d.skill.create({ data: { name: 'Git Workflow', type: 'tool', category: 'git', content: '# Git Workflow Tool\n\n- Conventional commits\n- Feature branches\n- PR review\n- Auto-merge rules', workspaceId: workspace.id } }),
   ])
 
   await d.agentSkill.createMany({
