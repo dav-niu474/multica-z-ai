@@ -1,13 +1,13 @@
 // AgentHub - Multi-Agent Team Collaboration Platform
-// Inspired by multica-ai/multica + addyosmani/agent-skills
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============ WORKSPACE ============
@@ -16,16 +16,16 @@ model Workspace {
   name        String
   slug        String   @unique
   description String?
-  context     String?  // Workspace-level agent system prompt
+  context     String?
   icon        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members   Member[]
-  agents    Agent[]
-  issues    Issue[]
-  projects  Project[]
-  skills    Skill[]
+  members      Member[]
+  agents       Agent[]
+  issues       Issue[]
+  projects     Project[]
+  skills       Skill[]
   chatSessions ChatSession[]
 }
 
@@ -43,7 +43,7 @@ model User {
 
 model Member {
   id          String   @id @default(cuid())
-  role        String   @default("member") // owner, admin, member
+  role        String   @default("member")
   userId      String
   workspaceId String
   createdAt   DateTime @default(now())
@@ -57,20 +57,20 @@ model Member {
 
 // ============ AGENT ============
 model Agent {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  avatar      String?
-  provider    String   @default("claude") // claude, codex, openai, gemini, custom
-  instructions String? // System prompt for the agent
-  status      String   @default("idle") // idle, working, blocked, error, offline
-  maxConcurrent Int    @default(3)
-  visibility  String   @default("workspace") // workspace, private
-  customEnv   String?  // JSON string of env vars
-  customArgs  String?  // JSON string of CLI args
-  mcpConfig   String?  // JSON string of MCP server config
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  avatar       String?
+  provider     String   @default("claude")
+  instructions String?
+  status       String   @default("idle")
+  maxConcurrent Int     @default(3)
+  visibility   String   @default("workspace")
+  customEnv    String?
+  customArgs   String?
+  mcpConfig    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -84,9 +84,9 @@ model Skill {
   id          String   @id @default(cuid())
   name        String
   description String?
-  content     String   // Markdown content
-  category    String?  // engineering, testing, review, deployment, custom
-  source      String?  // url, manual, import
+  content     String
+  category    String?
+  source      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -97,7 +97,7 @@ model Skill {
 }
 
 model AgentSkill {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   agentId   String
   skillId   String
   createdAt DateTime @default(now())
@@ -110,21 +110,21 @@ model AgentSkill {
 
 // ============ ISSUE ============
 model Issue {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
-  status      String   @default("backlog") // backlog, todo, in_progress, in_review, done, cancelled
-  priority    String   @default("none") // none, low, medium, high, urgent
-  order       Int      @default(0)
-  assigneeType String? // member, agent
+  status      String    @default("backlog")
+  priority    String    @default("none")
+  order       Int       @default(0)
+  assigneeType String?
   assigneeId   String?
-  creatorType  String  @default("member") // member, agent
+  creatorType  String    @default("member")
   creatorId    String?
   projectId    String?
   dueDate      DateTime?
-  labels       String? // JSON array string
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  labels       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -132,7 +132,6 @@ model Issue {
 
   comments Comment[]
   tasks    AgentTask[]
-
   activity ActivityLog[]
 }
 
@@ -140,7 +139,7 @@ model Issue {
 model Comment {
   id        String   @id @default(cuid())
   content   String
-  authorType String  @default("member") // member, agent
+  authorType String   @default("member")
   authorId   String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -151,19 +150,19 @@ model Comment {
 
 // ============ AGENT TASK ============
 model AgentTask {
-  id          String   @id @default(cuid())
-  status      String   @default("queued") // queued, dispatched, running, completed, failed, cancelled
-  output      String?  // Agent output / response
-  tokensUsed  Int      @default(0)
+  id          String    @id @default(cuid())
+  status      String    @default("queued")
+  output      String?
+  tokensUsed  Int       @default(0)
   startedAt   DateTime?
   completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   agentId String
   agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
   issueId String?
-  issue   Issue?  @relation(fields: [issueId], references: [id])
+  issue   Issue? @relation(fields: [issueId], references: [id])
 
   chatSessionId String?
   chatSession   ChatSession? @relation(fields: [chatSessionId], references: [id])
@@ -175,7 +174,7 @@ model Project {
   name        String
   description String?
   icon        String?
-  status      String   @default("planned") // planned, in_progress, paused, completed, cancelled
+  status      String   @default("planned")
   priority    String   @default("none")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -206,7 +205,7 @@ model ChatSession {
 // ============ CHAT MESSAGE ============
 model ChatMessage {
   id        String   @id @default(cuid())
-  role      String   // user, agent, system
+  role      String
   content   String
   createdAt DateTime @default(now())
 
@@ -216,15 +215,15 @@ model ChatMessage {
 
 // ============ ACTIVITY LOG ============
 model ActivityLog {
-  id          String   @id @default(cuid())
-  action      String   // created, updated, assigned, commented, status_changed, etc.
-  entityType  String   // issue, agent, comment, project
-  entityId    String
-  actorType   String?  // member, agent, system
-  actorId     String?
-  metadata    String?  // JSON string for additional context
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  actorType  String?
+  actorId    String?
+  metadata   String?
+  createdAt  DateTime @default(now())
 
   issueId String?
-  issue   Issue?  @relation(fields: [issueId], references: [id])
+  issue   Issue? @relation(fields: [issueId], references: [id])
 }
