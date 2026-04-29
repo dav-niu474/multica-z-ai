@@ -264,9 +264,16 @@ const zh: TranslationKeys = {
 
   // ==================== 技能视图 ====================
   skills: {
-    title: '技能',
+    title: '技能与工具',
     subtitle: '管理可复用的智能体技能和能力',
     createSkill: '创建技能',
+    createTool: '创建工具',
+    skillLabel: '技能',
+    toolLabel: '工具',
+    typeLabel: '类型',
+    selectType: '选择类型',
+    selectCategory: '选择分类',
+    selectSource: '选择来源',
     noSkillsFound: '未找到技能',
     tryAdjusting: '尝试调整搜索或筛选条件',
     createFirstSkill: '创建你的第一个技能以开始使用',
@@ -283,9 +290,12 @@ const zh: TranslationKeys = {
     noAgentsAttached: '暂无智能体关联此技能。',
     // 表单
     editSkill: '编辑技能',
+    editTool: '编辑工具',
     createSkillTitle: '创建技能',
+    createToolTitle: '创建工具',
     editSkillDesc: '更新技能详情和内容。',
     createSkillDesc: '定义一个新的技能，可以关联到智能体。',
+    createToolDesc: '定义一个新的工具，可以供智能体使用。',
     namePlaceholder: '例如：代码审查、TDD 工作流',
     descriptionPlaceholder: '简要描述此技能涵盖的内容',
     contentMarkdown: '内容（Markdown）',

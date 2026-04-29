@@ -435,8 +435,9 @@ export function ProjectsView({ workspaceId, onNavigateToIssue }: ProjectIssuesVi
         </div>
       )}
 
-      {/* Project Form Dialog */}
+      {/* Project Form Dialog - key forces remount when switching create/edit */}
       <ProjectFormDialog
+        key={editingProject?.id ?? 'create-new'}
         open={formOpen}
         onOpenChange={setFormOpen}
         project={editingProject}

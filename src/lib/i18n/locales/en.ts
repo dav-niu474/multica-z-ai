@@ -262,9 +262,16 @@ const en = {
 
   // ==================== Skills View ====================
   skills: {
-    title: 'Skills',
+    title: 'Skills & Tools',
     subtitle: 'Manage reusable agent skills and capabilities',
     createSkill: 'Create Skill',
+    createTool: 'Create Tool',
+    skillLabel: 'Skill',
+    toolLabel: 'Tool',
+    typeLabel: 'Type',
+    selectType: 'Select type',
+    selectCategory: 'Select category',
+    selectSource: 'Select source',
     noSkillsFound: 'No skills found',
     tryAdjusting: 'Try adjusting your search or filter',
     createFirstSkill: 'Create your first skill to get started',
@@ -281,9 +288,12 @@ const en = {
     noAgentsAttached: 'No agents are attached to this skill yet.',
     // Form
     editSkill: 'Edit Skill',
+    editTool: 'Edit Tool',
     createSkillTitle: 'Create Skill',
+    createToolTitle: 'Create Tool',
     editSkillDesc: 'Update the skill details and content.',
     createSkillDesc: 'Define a new skill that can be attached to agents.',
+    createToolDesc: 'Define a new tool that can be used by agents.',
     namePlaceholder: 'e.g. Code Review, TDD Workflow',
     descriptionPlaceholder: 'Brief description of what this skill covers',
     contentMarkdown: 'Content (Markdown)',

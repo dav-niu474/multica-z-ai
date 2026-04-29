@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { PrismaClient } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Drop all tables in correct order (child tables first, then parent tables)
@@ -18,28 +18,28 @@ const DROP_TABLES_SQL = [
   'DROP TABLE IF EXISTS "Workspace" CASCADE',
 ]
 
-// Individual SQL statements to create all tables
+// SQL statements to create all tables (always CREATE, never IF NOT EXISTS)
 const CREATE_TABLES_SQL = [
   'CREATE SCHEMA IF NOT EXISTS "public"',
-  `CREATE TABLE IF NOT EXISTS "Workspace" (
+  `CREATE TABLE "Workspace" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "slug" TEXT NOT NULL, "description" TEXT,
     "context" TEXT, "icon" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Workspace_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX IF NOT EXISTS "Workspace_slug_key" ON "Workspace"("slug")',
-  `CREATE TABLE IF NOT EXISTS "User" (
+  'CREATE UNIQUE INDEX "Workspace_slug_key" ON "Workspace"("slug")',
+  `CREATE TABLE "User" (
     "id" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "avatar" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "User_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")',
-  `CREATE TABLE IF NOT EXISTS "Member" (
+  'CREATE UNIQUE INDEX "User_email_key" ON "User"("email")',
+  `CREATE TABLE "Member" (
     "id" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT 'member', "userId" TEXT NOT NULL,
     "workspaceId" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Member_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX IF NOT EXISTS "Member_userId_workspaceId_key" ON "Member"("userId", "workspaceId")',
-  `CREATE TABLE IF NOT EXISTS "Agent" (
+  'CREATE UNIQUE INDEX "Member_userId_workspaceId_key" ON "Member"("userId", "workspaceId")',
+  `CREATE TABLE "Agent" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "avatar" TEXT,
     "provider" TEXT NOT NULL DEFAULT 'claude', "instructions" TEXT,
     "status" TEXT NOT NULL DEFAULT 'idle', "maxConcurrent" INTEGER NOT NULL DEFAULT 3,
@@ -48,27 +48,27 @@ const CREATE_TABLES_SQL = [
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Agent_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "Skill" (
+  `CREATE TABLE "Skill" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "content" TEXT NOT NULL,
     "type" TEXT NOT NULL DEFAULT 'skill', "category" TEXT, "source" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Skill_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "AgentSkill" (
+  `CREATE TABLE "AgentSkill" (
     "id" TEXT NOT NULL, "agentId" TEXT NOT NULL, "skillId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "AgentSkill_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX IF NOT EXISTS "AgentSkill_agentId_skillId_key" ON "AgentSkill"("agentId", "skillId")',
-  `CREATE TABLE IF NOT EXISTS "Project" (
+  'CREATE UNIQUE INDEX "AgentSkill_agentId_skillId_key" ON "AgentSkill"("agentId", "skillId")',
+  `CREATE TABLE "Project" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "icon" TEXT,
     "status" TEXT NOT NULL DEFAULT 'planned', "priority" TEXT NOT NULL DEFAULT 'none',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "Issue" (
+  `CREATE TABLE "Issue" (
     "id" TEXT NOT NULL, "title" TEXT NOT NULL, "description" TEXT,
     "status" TEXT NOT NULL DEFAULT 'backlog', "priority" TEXT NOT NULL DEFAULT 'none',
     "order" INTEGER NOT NULL DEFAULT 0, "assigneeType" TEXT, "assigneeId" TEXT,
@@ -78,33 +78,33 @@ const CREATE_TABLES_SQL = [
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Issue_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "Comment" (
+  `CREATE TABLE "Comment" (
     "id" TEXT NOT NULL, "content" TEXT NOT NULL,
     "authorType" TEXT NOT NULL DEFAULT 'member', "authorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "issueId" TEXT NOT NULL,
     CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "AgentTask" (
+  `CREATE TABLE "AgentTask" (
     "id" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'queued', "output" TEXT,
     "tokensUsed" INTEGER NOT NULL DEFAULT 0, "startedAt" TIMESTAMP(3),
     "completedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "agentId" TEXT NOT NULL, "issueId" TEXT,
     "chatSessionId" TEXT, CONSTRAINT "AgentTask_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "ChatSession" (
+  `CREATE TABLE "ChatSession" (
     "id" TEXT NOT NULL, "title" TEXT, "agentId" TEXT,
     "unreadCount" INTEGER NOT NULL DEFAULT 0, "isArchived" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "ChatSession_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "ChatMessage" (
+  `CREATE TABLE "ChatMessage" (
     "id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "sessionId" TEXT NOT NULL, CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE IF NOT EXISTS "ActivityLog" (
+  `CREATE TABLE "ActivityLog" (
     "id" TEXT NOT NULL, "action" TEXT NOT NULL, "entityType" TEXT NOT NULL,
     "entityId" TEXT NOT NULL, "actorType" TEXT, "actorId" TEXT, "metadata" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "issueId" TEXT,
@@ -132,7 +132,32 @@ const ADD_FK_SQL = [
   'ALTER TABLE "ActivityLog" ADD CONSTRAINT "ActivityLog_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE',
 ]
 
-async function seedDemoData(d: ReturnType<typeof db>) {
+function getDatabaseUrl(): string {
+  const url =
+    process.env.DATABASE_URL ||
+    process.env.multicaZai_POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.multicaZai_POSTGRES_URL_NON_POOLING ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.multicaZai_POSTGRES_URL ||
+    process.env.POSTGRES_URL
+
+  if (!url) {
+    throw new Error('DATABASE_URL is not set. Please configure it in Vercel dashboard or .env file.')
+  }
+
+  return url
+}
+
+// Create a fresh PrismaClient (important after DDL changes)
+function createFreshClient(): PrismaClient {
+  return new PrismaClient({
+    datasources: { db: { url: getDatabaseUrl() } },
+    log: process.env.NODE_ENV === 'production' ? ['error'] : ['error', 'warn'],
+  })
+}
+
+async function seedDemoData(d: PrismaClient) {
   const now = new Date()
   const day = (n: number) => new Date(now.getTime() - n * 86400000)
 
@@ -217,7 +242,6 @@ async function seedDemoData(d: ReturnType<typeof db>) {
   })
 
   const issueRealtime = (await d.issue.findFirst({ where: { title: { contains: 'real-time' } } }))!
-
   const issueWebsocket = (await d.issue.findFirst({ where: { title: { contains: 'WebSocket' } } }))!
   const issueTests = (await d.issue.findFirst({ where: { title: { contains: 'integration tests' } } }))!
   const issueRateLimit = (await d.issue.findFirst({ where: { title: { contains: 'rate limiting' } } }))!
@@ -240,52 +264,58 @@ async function seedDemoData(d: ReturnType<typeof db>) {
   return { workspaces: 1, users: 3, agents: 4, skills: 5, issues: 12, projects: 2, chatSessions: 2 }
 }
 
-// POST /api/setup?force=true - Create database tables and seed demo data
-// Use ?force=true to drop and recreate all tables from scratch
+// POST /api/setup - Create database tables and seed demo data
+// Always drops and recreates tables to ensure schema is correct
 export async function POST(request: NextRequest) {
+  // Create a dedicated client for DDL operations
+  let ddlClient: PrismaClient | null = null
+
   try {
-    const { searchParams } = new URL(request.url)
-    const force = searchParams.get('force') === 'true'
-    const client = db()
+    ddlClient = createFreshClient()
 
-    // Step 0: If force=true, drop all existing tables first
-    if (force) {
-      for (const sql of DROP_TABLES_SQL) {
-        await client.$executeRawUnsafe(sql)
-      }
+    // Step 1: Drop all existing tables (CASCADE handles dependencies)
+    for (const sql of DROP_TABLES_SQL) {
+      await ddlClient.$executeRawUnsafe(sql)
     }
 
-    // Step 1: Create all tables (execute each SQL statement individually)
+    // Step 2: Create all tables with correct schema
     for (const sql of CREATE_TABLES_SQL) {
-      await client.$executeRawUnsafe(sql)
+      await ddlClient.$executeRawUnsafe(sql)
     }
 
-    // Step 2: Add foreign keys (skip if already exists)
+    // Step 3: Add foreign key constraints
     for (const fkSql of ADD_FK_SQL) {
-      try {
-        await client.$executeRawUnsafe(fkSql)
-      } catch {
-        // Constraint may already exist, skip
-      }
+      await ddlClient.$executeRawUnsafe(fkSql)
     }
 
-    // Step 3: Check if data already exists
-    const existingWorkspaces = await client.workspace.count()
-    if (existingWorkspaces > 0) {
-      return NextResponse.json({
-        success: true,
-        message: force ? 'Database recreated (existing data preserved - tables were already correct)' : 'Database already set up',
-        existingWorkspaces,
-        force
-      })
-    }
+    // Disconnect the DDL client (schema may have changed)
+    await ddlClient.$disconnect()
+    ddlClient = null
 
-    // Step 4: Seed demo data
-    const stats = await seedDemoData(client)
+    // Step 4: Create a fresh client for seeding (ensures clean Prisma metadata)
+    const seedClient = createFreshClient()
 
-    return NextResponse.json({ success: true, message: 'Database setup and seed completed', stats })
+    // Step 5: Seed demo data
+    const stats = await seedDemoData(seedClient)
+
+    await seedClient.$disconnect()
+
+    return NextResponse.json({
+      success: true,
+      message: 'Database setup and seed completed',
+      stats,
+    })
   } catch (error) {
     console.error('Error setting up database:', error)
-    return NextResponse.json({ error: 'Failed to setup database', details: String(error) }, { status: 500 })
+
+    // Make sure client is disconnected on error
+    if (ddlClient) {
+      try { await ddlClient.$disconnect() } catch { /* ignore */ }
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to setup database', details: String(error) },
+      { status: 500 }
+    )
   }
 }

@@ -5,14 +5,6 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function getDatabaseUrl(): string {
-  // Priority order for database URL:
-  // 1. DATABASE_URL (explicitly configured, works for both queries and schema ops)
-  // 2. multicaZai_POSTGRES_PRISMA_URL (Vercel Postgres integration, optimized for Prisma)
-  // 3. POSTGRES_PRISMA_URL (standard Vercel Postgres integration)
-  // 4. multicaZai_POSTGRES_URL_NON_POOLING (Vercel Postgres non-pooling URL)
-  // 5. POSTGRES_URL_NON_POOLING
-  // 6. multicaZai_POSTGRES_URL (Vercel Postgres custom store pooling URL)
-  // 7. POSTGRES_URL (Vercel Postgres pooling URL)
   const url =
     process.env.DATABASE_URL ||
     process.env.multicaZai_POSTGRES_PRISMA_URL ||
@@ -58,5 +50,10 @@ export function db() {
     return globalForPrisma.prisma
   }
   // In serverless, create a fresh client to avoid stale connections
+  return createPrismaClient()
+}
+
+/** Create a completely fresh Prisma client (bypasses singleton), useful after DDL */
+export function createFreshDb() {
   return createPrismaClient()
 }

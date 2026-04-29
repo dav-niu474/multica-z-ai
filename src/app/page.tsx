@@ -71,23 +71,72 @@ function AppContent() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [setupError, setSetupError] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    fetch('/api/setup', { method: 'POST' })
-      .catch(() => {})
-      .finally(() => {
-        fetch('/api/workspaces')
-          .then((r) => r.json())
-          .then((data: Workspace[]) => {
-            if (data.length > 0) {
-              setWorkspace(data[0])
-              setWorkspaceId(data[0].id)
-            }
-          })
-          .catch(console.error)
-          .finally(() => setLoading(false))
-      })
+    async function init() {
+      try {
+        // Step 1: Setup database (always recreates tables + seeds)
+        const setupRes = await fetch('/api/setup', { method: 'POST' })
+        if (!setupRes.ok) {
+          const errData = await setupRes.json().catch(() => ({}))
+          console.error('Setup failed:', errData)
+          setSetupError('Database setup failed. Please try again.')
+          setLoading(false)
+          return
+        }
+
+        // Step 2: Fetch workspaces
+        const wsRes = await fetch('/api/workspaces')
+        if (!wsRes.ok) {
+          console.error('Failed to fetch workspaces:', wsRes.status)
+          setSetupError('Failed to load workspace data.')
+          setLoading(false)
+          return
+        }
+
+        const data: Workspace[] = await wsRes.json()
+        if (data.length > 0) {
+          setWorkspace(data[0])
+          setWorkspaceId(data[0].id)
+        }
+      } catch (err) {
+        console.error('Init error:', err)
+        setSetupError('Network error. Please check your connection.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    init()
+  }, [])
+
+  const handleRetry = useCallback(async () => {
+    setSetupError(null)
+    setLoading(true)
+    try {
+      const setupRes = await fetch('/api/setup', { method: 'POST' })
+      if (!setupRes.ok) {
+        setSetupError('Database setup failed. Please try again.')
+        setLoading(false)
+        return
+      }
+      const wsRes = await fetch('/api/workspaces')
+      if (wsRes.ok) {
+        const data: Workspace[] = await wsRes.json()
+        if (data.length > 0) {
+          setWorkspace(data[0])
+          setWorkspaceId(data[0].id)
+        }
+        setSetupError(null)
+      }
+    } catch (err) {
+      console.error('Retry error:', err)
+      setSetupError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const handleNav = useCallback((view: ViewType) => {
@@ -96,6 +145,20 @@ function AppContent() {
   }, [])
 
   const renderView = useCallback(() => {
+    if (setupError) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center space-y-3">
+            <Layers className="h-12 w-12 text-destructive/20 mx-auto" />
+            <p className="text-sm text-destructive">{setupError}</p>
+            <Button variant="outline" size="sm" onClick={handleRetry}>
+              {t.common.retry}
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
     if (!workspaceId && activeView !== 'settings') {
       return (
         <div className="flex items-center justify-center h-full">
@@ -105,7 +168,7 @@ function AppContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.location.reload()}
+              onClick={handleRetry}
             >
               {t.common.retry}
             </Button>
@@ -134,7 +197,7 @@ function AppContent() {
       default:
         return null
     }
-  }, [activeView, workspaceId, t])
+  }, [activeView, workspaceId, t, setupError, handleRetry])
 
   if (loading) {
     return (
