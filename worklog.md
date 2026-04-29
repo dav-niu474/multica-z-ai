@@ -362,3 +362,30 @@ Stage Summary:
 - i18n 系统完整：所有页面文本都有中英文翻译
 - 本地存储语言偏好（localStorage key: agenthub-locale）
 - 生产环境: https://multica-z-ai.vercel.app
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: 修复 Projects 编辑不填充、Skills/Tools 区分、i18n 侧边栏标题
+
+Work Log:
+- 问题1: ProjectFormDialog 和 SkillFormDialog 使用 useState 初始化值，但 prop 变化时不会重新渲染
+  修复: 两个表单都添加 useEffect 监听 prop 变化同步状态
+- 问题2: Skills 模块没有区分技能(Skill)和工具(Tool)
+  修复: Skill model 新增 type 字段 ('skill'/'tool')
+  - 更新 prisma schema、setup route DDL 和种子数据
+  - Skills 视图添加 Type 筛选器 + 类型徽章 (Skill=amber, Tool=emerald)
+  - Skill 表单添加 Type 选择器 (Skill 技能 / Tool 工具)
+  - Skills API (POST/PUT) 支持 type 字段
+  - 种子数据: Code Review/TDD/Security Audit = skill, API Design/Git Workflow = tool
+- 问题3: i18n 侧边栏标题不显示
+  原因: t['nav.dashboard'] 语法错误，t 是嵌套对象不能用点分隔字符串访问
+  修复: 创建 getNavLabel() 函数使用 switch/case 直接返回 t.nav.dashboard
+- 数据库 force rebuild 验证: type 字段正确
+- Project API 编辑验证: 更新正常
+
+Stage Summary:
+- Projects 编辑现在正确回填所有字段
+- Skills 和 Tools 明确区分: amber=技能, emerald=工具
+- 侧边栏导航标签国际化正常显示
+- 生产环境: https://multica-z-ai.vercel.app
