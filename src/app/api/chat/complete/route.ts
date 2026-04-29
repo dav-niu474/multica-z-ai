@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify session exists
-    const session = await db.chatSession.findUnique({
+    const session = await db().chatSession.findUnique({
       where: { id: sessionId },
     })
 
@@ -33,14 +33,14 @@ export async function POST(request: NextRequest) {
     let effectiveModel = model
 
     if (agentId && !providerId) {
-      const agent = await db.agent.findUnique({ where: { id: agentId } })
+      const agent = await db().agent.findUnique({ where: { id: agentId } })
       if (agent?.provider) {
         effectiveProviderId = agent.provider
       }
     }
 
     // Save user message
-    await db.chatMessage.create({
+    await db().chatMessage.create({
       data: {
         role: 'user',
         content: message,
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get conversation history for context
-    const recentMessages = await db.chatMessage.findMany({
+    const recentMessages = await db().chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'asc' },
       take: 20,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Save agent response
-      const agentMessage = await db.chatMessage.create({
+      const agentMessage = await db().chatMessage.create({
         data: {
           role: 'agent',
           content: completion.content,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Update session
-      await db.chatSession.update({
+      await db().chatSession.update({
         where: { id: sessionId },
         data: {
           updatedAt: new Date(),
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       const errorMessage = modelError instanceof Error ? modelError.message : 'Model API error'
 
       // Save error as system message
-      await db.chatMessage.create({
+      await db().chatMessage.create({
         data: {
           role: 'system',
           content: `[Error] ${errorMessage}`,

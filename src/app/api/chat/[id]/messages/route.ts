@@ -9,7 +9,7 @@ export async function GET(
   try {
     const { id } = await params
 
-    const session = await db.chatSession.findUnique({
+    const session = await db().chatSession.findUnique({
       where: { id },
       include: {
         messages: {
@@ -60,7 +60,7 @@ export async function POST(
     }
 
     // Verify session exists
-    const session = await db.chatSession.findUnique({ where: { id } })
+    const session = await db().chatSession.findUnique({ where: { id } })
     if (!session) {
       return NextResponse.json(
         { error: 'Chat session not found' },
@@ -68,7 +68,7 @@ export async function POST(
       )
     }
 
-    const message = await db.chatMessage.create({
+    const message = await db().chatMessage.create({
       data: {
         role,
         content,
@@ -87,7 +87,7 @@ export async function POST(
         content.length > 50 ? content.substring(0, 50) + '...' : content
     }
 
-    await db.chatSession.update({
+    await db().chatSession.update({
       where: { id },
       data: updateData,
     })

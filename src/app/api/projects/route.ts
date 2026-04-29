@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const projects = await db.project.findMany({
+    const projects = await db().project.findMany({
       where: { workspaceId },
       include: {
         _count: {
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const project = await db.project.create({
+    const project = await db().project.create({
       data: {
         name,
         description: description || null,

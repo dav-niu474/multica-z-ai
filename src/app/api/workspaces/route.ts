@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // GET /api/workspaces - List all workspaces
 export async function GET() {
   try {
-    const workspaces = await db.workspace.findMany({
+    const workspaces = await db().workspace.findMany({
       include: {
         _count: {
           select: {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if slug already exists
-    const existing = await db.workspace.findUnique({
+    const existing = await db().workspace.findUnique({
       where: { slug },
     })
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const workspace = await db.workspace.create({
+    const workspace = await db().workspace.create({
       data: {
         name,
         slug,

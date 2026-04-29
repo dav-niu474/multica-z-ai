@@ -5,36 +5,36 @@ import { NextResponse } from 'next/server'
 export async function POST() {
   try {
     // Clean existing data (delete in reverse dependency order)
-    await db.activityLog.deleteMany()
-    await db.chatMessage.deleteMany()
-    await db.agentTask.deleteMany()
-    await db.agentSkill.deleteMany()
-    await db.comment.deleteMany()
-    await db.issue.deleteMany()
-    await db.chatSession.deleteMany()
-    await db.project.deleteMany()
-    await db.skill.deleteMany()
-    await db.agent.deleteMany()
-    await db.member.deleteMany()
-    await db.user.deleteMany()
-    await db.workspace.deleteMany()
+    await db().activityLog.deleteMany()
+    await db().chatMessage.deleteMany()
+    await db().agentTask.deleteMany()
+    await db().agentSkill.deleteMany()
+    await db().comment.deleteMany()
+    await db().issue.deleteMany()
+    await db().chatSession.deleteMany()
+    await db().project.deleteMany()
+    await db().skill.deleteMany()
+    await db().agent.deleteMany()
+    await db().member.deleteMany()
+    await db().user.deleteMany()
+    await db().workspace.deleteMany()
 
     // ============ USERS ============
-    const user1 = await db.user.create({
+    const user1 = await db().user.create({
       data: {
         email: 'alex@agenthub.dev',
         name: 'Alex Chen',
         avatar: null,
       },
     })
-    const user2 = await db.user.create({
+    const user2 = await db().user.create({
       data: {
         email: 'sarah@agenthub.dev',
         name: 'Sarah Kim',
         avatar: null,
       },
     })
-    const user3 = await db.user.create({
+    const user3 = await db().user.create({
       data: {
         email: 'mike@agenthub.dev',
         name: 'Mike Rivera',
@@ -43,7 +43,7 @@ export async function POST() {
     })
 
     // ============ WORKSPACE ============
-    const workspace = await db.workspace.create({
+    const workspace = await db().workspace.create({
       data: {
         name: 'AgentHub Team',
         slug: 'agenthub',
@@ -56,21 +56,21 @@ export async function POST() {
     })
 
     // ============ MEMBERS ============
-    await db.member.create({
+    await db().member.create({
       data: {
         role: 'owner',
         userId: user1.id,
         workspaceId: workspace.id,
       },
     })
-    await db.member.create({
+    await db().member.create({
       data: {
         role: 'admin',
         userId: user2.id,
         workspaceId: workspace.id,
       },
     })
-    await db.member.create({
+    await db().member.create({
       data: {
         role: 'member',
         userId: user3.id,
@@ -79,7 +79,7 @@ export async function POST() {
     })
 
     // ============ AGENTS ============
-    const agentClaude = await db.agent.create({
+    const agentClaude = await db().agent.create({
       data: {
         name: 'Claude Code',
         description:
@@ -94,7 +94,7 @@ export async function POST() {
       },
     })
 
-    const agentCodex = await db.agent.create({
+    const agentCodex = await db().agent.create({
       data: {
         name: 'Codex',
         description:
@@ -109,7 +109,7 @@ export async function POST() {
       },
     })
 
-    const agentGemini = await db.agent.create({
+    const agentGemini = await db().agent.create({
       data: {
         name: 'Gemini Analyst',
         description:
@@ -124,7 +124,7 @@ export async function POST() {
       },
     })
 
-    const agentCustom = await db.agent.create({
+    const agentCustom = await db().agent.create({
       data: {
         name: 'DevOps Bot',
         description:
@@ -140,7 +140,7 @@ export async function POST() {
     })
 
     // ============ SKILLS ============
-    const skillCodeReview = await db.skill.create({
+    const skillCodeReview = await db().skill.create({
       data: {
         name: 'Code Review',
         description:
@@ -168,7 +168,7 @@ export async function POST() {
       },
     })
 
-    const skillTDD = await db.skill.create({
+    const skillTDD = await db().skill.create({
       data: {
         name: 'Test-Driven Development',
         description:
@@ -192,7 +192,7 @@ export async function POST() {
       },
     })
 
-    const skillSecurity = await db.skill.create({
+    const skillSecurity = await db().skill.create({
       data: {
         name: 'Security Audit',
         description:
@@ -216,7 +216,7 @@ Review code against the OWASP Top 10 security risks.`,
       },
     })
 
-    const skillApiDesign = await db.skill.create({
+    const skillApiDesign = await db().skill.create({
       data: {
         name: 'API Design',
         description:
@@ -250,7 +250,7 @@ Review code against the OWASP Top 10 security risks.`,
       },
     })
 
-    const skillGitWorkflow = await db.skill.create({
+    const skillGitWorkflow = await db().skill.create({
       data: {
         name: 'Git Workflow',
         description:
@@ -284,19 +284,19 @@ Review code against the OWASP Top 10 security risks.`,
     })
 
     // ============ AGENT-SKILL ASSOCIATIONS ============
-    await db.agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillCodeReview.id } })
-    await db.agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillTDD.id } })
-    await db.agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillGitWorkflow.id } })
-    await db.agentSkill.create({ data: { agentId: agentCodex.id, skillId: skillApiDesign.id } })
-    await db.agentSkill.create({ data: { agentId: agentCodex.id, skillId: skillGitWorkflow.id } })
-    await db.agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillCodeReview.id } })
-    await db.agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillSecurity.id } })
-    await db.agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillTDD.id } })
-    await db.agentSkill.create({ data: { agentId: agentCustom.id, skillId: skillGitWorkflow.id } })
-    await db.agentSkill.create({ data: { agentId: agentCustom.id, skillId: skillSecurity.id } })
+    await db().agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillCodeReview.id } })
+    await db().agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillTDD.id } })
+    await db().agentSkill.create({ data: { agentId: agentClaude.id, skillId: skillGitWorkflow.id } })
+    await db().agentSkill.create({ data: { agentId: agentCodex.id, skillId: skillApiDesign.id } })
+    await db().agentSkill.create({ data: { agentId: agentCodex.id, skillId: skillGitWorkflow.id } })
+    await db().agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillCodeReview.id } })
+    await db().agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillSecurity.id } })
+    await db().agentSkill.create({ data: { agentId: agentGemini.id, skillId: skillTDD.id } })
+    await db().agentSkill.create({ data: { agentId: agentCustom.id, skillId: skillGitWorkflow.id } })
+    await db().agentSkill.create({ data: { agentId: agentCustom.id, skillId: skillSecurity.id } })
 
     // ============ PROJECTS ============
-    const projectFrontend = await db.project.create({
+    const projectFrontend = await db().project.create({
       data: {
         name: 'AgentHub Dashboard',
         description: 'Main dashboard UI with real-time agent monitoring, issue tracking, and team collaboration features.',
@@ -307,7 +307,7 @@ Review code against the OWASP Top 10 security risks.`,
       },
     })
 
-    const projectBackend = await db.project.create({
+    const projectBackend = await db().project.create({
       data: {
         name: 'API Gateway v2',
         description: 'Next-generation API gateway with rate limiting, caching, and intelligent request routing.',
@@ -324,7 +324,7 @@ Review code against the OWASP Top 10 security risks.`,
 
     const issues = await Promise.all([
       // Backlog issues
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Implement dark mode theme toggle',
           description: 'Add a dark mode toggle that persists user preference in localStorage. Follow shadcn/ui theming conventions.',
@@ -339,7 +339,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(14),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Add keyboard shortcuts for common actions',
           description: 'Implement keyboard shortcuts: Cmd+K for search, Cmd+N for new issue, Cmd+Shift+A for new agent.',
@@ -356,7 +356,7 @@ Review code against the OWASP Top 10 security risks.`,
       }),
 
       // Todo issues
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Set up rate limiting middleware',
           description: 'Implement sliding window rate limiting with configurable thresholds per endpoint.',
@@ -374,7 +374,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(10),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Design agent collaboration protocol',
           description: 'Define the communication protocol between agents: message format, handoff rules, and conflict resolution.',
@@ -392,7 +392,7 @@ Review code against the OWASP Top 10 security risks.`,
       }),
 
       // In-progress issues
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Build real-time agent status panel',
           description: 'Create a live-updating panel showing agent statuses (idle/working/blocked/error) with task progress indicators.',
@@ -410,7 +410,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(7),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Implement WebSocket event broadcasting',
           description: 'Set up Socket.IO event system for broadcasting agent status changes, task updates, and issue notifications.',
@@ -429,7 +429,7 @@ Review code against the OWASP Top 10 security risks.`,
       }),
 
       // In-review issues
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Add comprehensive error boundary components',
           description: 'Create React error boundaries for route-level and component-level error handling with user-friendly fallback UIs.',
@@ -446,7 +446,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(9),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Write API endpoint integration tests',
           description: 'Add integration tests for all API endpoints using the testing skill. Cover success cases, error cases, and edge cases.',
@@ -464,7 +464,7 @@ Review code against the OWASP Top 10 security risks.`,
       }),
 
       // Done issues
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Initialize Prisma schema with all models',
           description: 'Define the complete database schema with Workspace, User, Agent, Issue, Skill, Chat, and ActivityLog models.',
@@ -481,7 +481,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(20),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Set up project scaffolding with Next.js 16',
           description: 'Initialize Next.js 16 project with App Router, Tailwind CSS 4, shadcn/ui, and TypeScript strict mode.',
@@ -498,7 +498,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(21),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Create sidebar navigation component',
           description: 'Build responsive sidebar with navigation links: Dashboard, Agents, Issues, Chat, Skills. Include active state indicators.',
@@ -515,7 +515,7 @@ Review code against the OWASP Top 10 security risks.`,
           createdAt: day(15),
         },
       }),
-      db.issue.create({
+      db().issue.create({
         data: {
           title: 'Configure Docker multi-stage build',
           description: 'Set up Dockerfile with multi-stage build for production: deps → build → runtime. Optimize layer caching.',
@@ -535,7 +535,7 @@ Review code against the OWASP Top 10 security risks.`,
     ])
 
     // ============ COMMENTS ============
-    await db.comment.create({
+    await db().comment.create({
       data: {
         content:
           'The error boundary should catch async errors too. Consider using a custom hook with useEffect for async error handling.',
@@ -545,7 +545,7 @@ Review code against the OWASP Top 10 security risks.`,
         createdAt: day(4),
       },
     })
-    await db.comment.create({
+    await db().comment.create({
       data: {
         content:
           'Good point! I\'ll add an useAsyncError hook. Should we also log errors to an external service?',
@@ -555,7 +555,7 @@ Review code against the OWASP Top 10 security risks.`,
         createdAt: day(3),
       },
     })
-    await db.comment.create({
+    await db().comment.create({
       data: {
         content:
           'Integration tests are passing for all CRUD endpoints. Need to add rate limiting tests once the middleware is implemented.',
@@ -565,7 +565,7 @@ Review code against the OWASP Top 10 security risks.`,
         createdAt: day(2),
       },
     })
-    await db.comment.create({
+    await db().comment.create({
       data: {
         content:
           'The real-time panel needs to handle reconnection gracefully. What about showing a "Reconnecting..." overlay when the WebSocket drops?',
@@ -577,7 +577,7 @@ Review code against the OWASP Top 10 security risks.`,
     })
 
     // ============ CHAT SESSIONS ============
-    const chatSession1 = await db.chatSession.create({
+    const chatSession1 = await db().chatSession.create({
       data: {
         title: 'Refactoring auth module',
         workspaceId: workspace.id,
@@ -586,7 +586,7 @@ Review code against the OWASP Top 10 security risks.`,
       },
     })
 
-    await db.chatMessage.createMany({
+    await db().chatMessage.createMany({
       data: [
         {
           role: 'user',
@@ -617,7 +617,7 @@ Review code against the OWASP Top 10 security risks.`,
       ],
     })
 
-    const chatSession2 = await db.chatSession.create({
+    const chatSession2 = await db().chatSession.create({
       data: {
         title: 'Performance optimization brainstorm',
         workspaceId: workspace.id,
@@ -626,7 +626,7 @@ Review code against the OWASP Top 10 security risks.`,
       },
     })
 
-    await db.chatMessage.createMany({
+    await db().chatMessage.createMany({
       data: [
         {
           role: 'user',
@@ -645,7 +645,7 @@ Review code against the OWASP Top 10 security risks.`,
     })
 
     // ============ AGENT TASKS ============
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'completed',
         output:
@@ -657,7 +657,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[4].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'running',
         output: null,
@@ -667,7 +667,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[4].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'completed',
         output:
@@ -679,7 +679,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[5].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'running',
         output: 'Running integration tests... 42/50 passed so far.',
@@ -689,7 +689,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[7].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'queued',
         output: null,
@@ -698,7 +698,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[2].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'failed',
         output:
@@ -710,7 +710,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[11].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'completed',
         output:
@@ -722,7 +722,7 @@ Review code against the OWASP Top 10 security risks.`,
         issueId: issues[11].id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'completed',
         output: 'Auth module refactored with JWT refresh tokens. All tests passing.',
@@ -733,7 +733,7 @@ Review code against the OWASP Top 10 security risks.`,
         chatSessionId: chatSession1.id,
       },
     })
-    await db.agentTask.create({
+    await db().agentTask.create({
       data: {
         status: 'running',
         output: 'Analyzing dashboard performance bottlenecks...',
@@ -745,7 +745,7 @@ Review code against the OWASP Top 10 security risks.`,
     })
 
     // ============ ACTIVITY LOGS ============
-    await db.activityLog.createMany({
+    await db().activityLog.createMany({
       data: [
         {
           action: 'created',

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const agents = await db.agent.findMany({
+    const agents = await db().agent.findMany({
       where: { workspaceId },
       include: {
         skills: {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const agent = await db.agent.create({
+    const agent = await db().agent.create({
       data: {
         name,
         description: description || null,

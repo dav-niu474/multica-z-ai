@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const project = await db.project.findUnique({
+    const project = await db().project.findUnique({
       where: { id },
       include: {
         issues: {
@@ -52,7 +52,7 @@ export async function PUT(
     const body = await request.json()
     const { name, description, icon, status, priority } = body
 
-    const project = await db.project.update({
+    const project = await db().project.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
@@ -77,7 +77,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.project.delete({ where: { id } })
+    await db().project.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting project:', error)

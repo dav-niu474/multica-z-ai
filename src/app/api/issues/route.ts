@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const issues = await db.issue.findMany({
+    const issues = await db().issue.findMany({
       where: {
         workspaceId,
         ...(status && status !== 'all' ? { status } : {}),
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const issue = await db.issue.create({
+    const issue = await db().issue.create({
       data: {
         title,
         description: description || null,

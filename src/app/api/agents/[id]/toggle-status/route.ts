@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const agent = await db.agent.findUnique({ where: { id } })
+    const agent = await db().agent.findUnique({ where: { id } })
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -16,7 +16,7 @@ export async function POST(
 
     const newStatus = agent.status === 'idle' ? 'working' : 'idle'
 
-    const updated = await db.agent.update({
+    const updated = await db().agent.update({
       where: { id },
       data: { status: newStatus },
     })

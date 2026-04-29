@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const issue = await db.issue.findUnique({
+    const issue = await db().issue.findUnique({
       where: { id },
       include: {
         project: {
@@ -76,14 +76,14 @@ export async function PUT(
       labels,
     } = body
 
-    const existing = await db.issue.findUnique({ where: { id } })
+    const existing = await db().issue.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Issue not found' }, { status: 404 })
     }
 
     // Log status change activity
     if (status && status !== existing.status) {
-      await db.activityLog.create({
+      await db().activityLog.create({
         data: {
           action: 'status_changed',
           entityType: 'issue',
@@ -100,7 +100,7 @@ export async function PUT(
 
     // Log priority change activity
     if (priority && priority !== existing.priority) {
-      await db.activityLog.create({
+      await db().activityLog.create({
         data: {
           action: 'priority_changed',
           entityType: 'issue',
@@ -120,7 +120,7 @@ export async function PUT(
       (assigneeId !== undefined && assigneeId !== existing.assigneeId) ||
       (assigneeType !== undefined && assigneeType !== existing.assigneeType)
     ) {
-      await db.activityLog.create({
+      await db().activityLog.create({
         data: {
           action: 'assigned',
           entityType: 'issue',
@@ -136,7 +136,7 @@ export async function PUT(
       })
     }
 
-    const issue = await db.issue.update({
+    const issue = await db().issue.update({
       where: { id },
       data: {
         ...(title !== undefined && { title }),
@@ -183,12 +183,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const existing = await db.issue.findUnique({ where: { id } })
+    const existing = await db().issue.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Issue not found' }, { status: 404 })
     }
 
-    await db.issue.delete({ where: { id } })
+    await db().issue.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting issue:', error)

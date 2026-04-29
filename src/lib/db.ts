@@ -22,22 +22,18 @@ function createPrismaClient() {
   })
 }
 
-// Lazy singleton: created on first access, reused afterward
-// In Vercel serverless, this ensures env vars are loaded before Prisma init
-let _prisma: PrismaClient | undefined
-
-export const db: PrismaClient = new Proxy({} as PrismaClient, {
-  get(_, prop) {
-    if (!_prisma) {
-      _prisma = globalForPrisma.prisma ?? createPrismaClient()
-      if (process.env.NODE_ENV !== 'production') {
-        globalForPrisma.prisma = _prisma
-      }
+/**
+ * Get a Prisma client instance.
+ * In development, reuses a singleton via globalThis (supports hot reload).
+ * In production (serverless), creates a new client per cold start.
+ */
+export function db() {
+  if (process.env.NODE_ENV !== 'production') {
+    if (!globalForPrisma.prisma) {
+      globalForPrisma.prisma = createPrismaClient()
     }
-    const value = Reflect.get(_prisma!, prop)
-    if (typeof value === 'function') {
-      return value.bind(_prisma)
-    }
-    return value
-  },
-})
+    return globalForPrisma.prisma
+  }
+  // In serverless, create a fresh client to avoid stale connections
+  return createPrismaClient()
+}

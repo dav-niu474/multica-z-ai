@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       activeTasks,
     ] = await Promise.all([
       // Workspace info
-      db.workspace.findUnique({
+      db().workspace.findUnique({
         where: { id: workspaceId },
         include: {
           _count: {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Agents with status counts
-      db.agent.findMany({
+      db().agent.findMany({
         where: { workspaceId },
         include: {
           _count: {
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // All issues for status breakdown
-      db.issue.findMany({
+      db().issue.findMany({
         where: { workspaceId },
         select: {
           id: true,
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Projects with issue counts
-      db.project.findMany({
+      db().project.findMany({
         where: { workspaceId },
         include: {
           _count: {
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Recent activity (last 20)
-      db.activityLog.findMany({
+      db().activityLog.findMany({
         where: { workspaceId: undefined }, // Activity logs are not directly linked to workspace, use issue relation
         take: 20,
         orderBy: { createdAt: 'desc' },
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Agent task status distribution
-      db.agentTask.groupBy({
+      db().agentTask.groupBy({
         by: ['status'],
         _count: {
           status: true,
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Currently running tasks
-      db.agentTask.findMany({
+      db().agentTask.findMany({
         where: { status: 'running' },
         include: {
           agent: {

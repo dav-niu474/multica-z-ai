@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const sessions = await db.chatSession.findMany({
+    const sessions = await db().chatSession.findMany({
       where: {
         workspaceId,
         isArchived: false,
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const session = await db.chatSession.create({
+    const session = await db().chatSession.create({
       data: {
         title: title || null,
         agentId: agentId || null,

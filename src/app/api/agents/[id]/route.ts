@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const agent = await db.agent.findUnique({
+    const agent = await db().agent.findUnique({
       where: { id },
       include: {
         skills: {
@@ -61,12 +61,12 @@ export async function PUT(
       mcpConfig,
     } = body
 
-    const existing = await db.agent.findUnique({ where: { id } })
+    const existing = await db().agent.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    const agent = await db.agent.update({
+    const agent = await db().agent.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
@@ -106,12 +106,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const existing = await db.agent.findUnique({ where: { id } })
+    const existing = await db().agent.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    await db.agent.delete({ where: { id } })
+    await db().agent.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting agent:', error)
