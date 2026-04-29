@@ -287,3 +287,29 @@ Stage Summary:
 - Rich demo data seeded automatically
 - Zero lint errors
 - All views properly connected and functional
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix all deployed API endpoints returning errors on Vercel
+
+Work Log:
+- Investigated Vercel deployment: all API routes returned 500 errors
+- Identified root cause: Prisma schema required DATABASE_URL/DIRECT_URL env vars not set on Vercel
+- Set DATABASE_URL and DIRECT_URL env vars on Vercel via REST API (CLI had issues with special chars in URLs)
+- Fixed Prisma schema: removed strict directUrl requirement
+- Fixed db.ts: multiple iterations - initially used @prisma/adapter-pg, then datasourceUrl, then Proxy, finally db() function
+- Discovered Neon pooled URL vs non-pooled URL routing mismatch causing "table not found" errors
+- Changed DATABASE_URL to non-pooled URL to ensure consistent database access
+- Pushed schema via `prisma db push --force-reset` using non-pooled URL
+- Seeded database with demo data (12 issues, 4 agents, 3 users, 2 projects, 5 skills)
+- Changed all 13 API route files from `db.xxx` to `db().xxx` for serverless compatibility
+- Set NVIDIA_API_KEY and NVIDIA_BASE_URL env vars on Vercel for all environments
+- Verified all 7 API endpoints return HTTP 200 on production
+
+Stage Summary:
+- All API endpoints working on https://multica-z-ai.vercel.app
+- Database: Vercel Postgres (Neon) with proper connection via non-pooled URL
+- Key fix: db.ts exports a `db()` function that creates fresh PrismaClient per request in production
+- NVIDIA NIM provider configured and enabled (1/6 providers active)
+- GitHub repo updated and Vercel deployment successful
