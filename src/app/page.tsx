@@ -52,9 +52,9 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    // Seed demo data first, then load workspace
-    fetch('/api/seed', { method: 'POST' })
-      .catch(() => {}) // Ignore if already seeded
+    // Setup database tables + seed demo data, then load workspace
+    fetch('/api/setup', { method: 'POST' })
+      .catch(() => {}) // Ignore if already set up
       .finally(() => {
         fetch('/api/workspaces')
           .then((r) => r.json())
