@@ -23,6 +23,7 @@ import {
   MessageSquare,
   ChevronDown,
   ArrowUpDown,
+  Radio,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -43,6 +44,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import IssueFormDialog from '@/components/issues/issue-form-dialog'
 import IssueDetailPanel from '@/components/issues/issue-detail-panel'
+import { useRealtime } from '@/lib/realtime-context'
 import type { Issue, Agent, Project, IssueStatus, IssuePriority } from '@/types'
 
 interface IssuesViewProps {
@@ -181,6 +183,7 @@ function SortableIssueCard({
 }
 
 export default function IssuesView({ workspaceId }: IssuesViewProps) {
+  const { onEvent } = useRealtime()
   const [issues, setIssues] = useState<Issue[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -189,6 +192,7 @@ export default function IssuesView({ workspaceId }: IssuesViewProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [pulseKey, setPulseKey] = useState(0)
 
   // List view filters
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -227,6 +231,19 @@ export default function IssuesView({ workspaceId }: IssuesViewProps) {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Listen for realtime issue updates — smart re-fetch: only re-fetch issues list
+  useEffect(() => {
+    const unsub = onEvent('issue:updated', () => {
+      // Smart re-fetch: only re-fetch issues, not agents/projects
+      fetch(`/api/issues?workspaceId=${workspaceId}`)
+        .then((res) => res.json())
+        .then((data) => setIssues(data))
+        .catch((err) => console.error('Realtime issue re-fetch error:', err))
+      setPulseKey((k) => k + 1)
+    })
+    return unsub
+  }, [onEvent, workspaceId])
 
   // Column mapping for Kanban
   const columnIssues = useMemo(() => {
@@ -358,6 +375,16 @@ export default function IssuesView({ workspaceId }: IssuesViewProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Live update indicator */}
+      {pulseKey > 0 && (
+        <div
+          key={pulseKey}
+          className="flex items-center gap-1.5 px-4 py-1 text-[10px] text-primary animate-in fade-in duration-300"
+        >
+          <Radio className="h-3 w-3 animate-pulse" />
+          <span>Issue updated live</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between p-4 pb-2 border-b">
         <div className="flex items-center gap-3">

@@ -38,6 +38,8 @@ import {
 } from 'lucide-react'
 import type { DashboardData, Agent, AgentStatus } from '@/types'
 import { useWorkspace } from '@/hooks/use-workspace'
+import { useRealtime } from '@/lib/realtime-context'
+import { Radio } from 'lucide-react'
 
 const STATUS_COLORS: Record<AgentStatus, string> = {
   idle: 'bg-emerald-500',
@@ -89,34 +91,54 @@ const issueChartConfig = {
 
 export default function DashboardView() {
   const { workspaceId, loading: wsLoading, error: wsError } = useWorkspace()
+  const { onEvent } = useRealtime()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pulseKey, setPulseKey] = useState(0)
+
+  const fetchDashboard = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const dashRes = await fetch(`/api/dashboard?workspaceId=${workspaceId}`)
+      if (!dashRes.ok) throw new Error('Failed to fetch data')
+      const dashJson = await dashRes.json()
+      setDashboardData(dashJson)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    }
+  }, [workspaceId])
 
   useEffect(() => {
     if (!workspaceId) return
-
     async function fetchData() {
       try {
         setLoading(true)
-        const [dashRes] = await Promise.all([
-          fetch(`/api/dashboard?workspaceId=${workspaceId}`),
-        ])
-
-        if (!dashRes.ok) {
-          throw new Error('Failed to fetch data')
-        }
-
-        const dashJson = await dashRes.json()
-        setDashboardData(dashJson)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
+        await fetchDashboard()
       } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [workspaceId])
+  }, [workspaceId, fetchDashboard])
+
+  // Listen for realtime events and re-fetch dashboard data
+  useEffect(() => {
+    const unsubIssueUpdated = onEvent('issue:updated', () => {
+      fetchDashboard()
+      setPulseKey((k) => k + 1)
+    })
+
+    const unsubAgentStatus = onEvent('agent:status-changed', () => {
+      fetchDashboard()
+      setPulseKey((k) => k + 1)
+    })
+
+    return () => {
+      unsubIssueUpdated()
+      unsubAgentStatus()
+    }
+  }, [onEvent, fetchDashboard])
 
   const displayError = wsError || error
   const isLoading = wsLoading || loading
@@ -159,6 +181,16 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6">
+      {/* Live update pulse indicator */}
+      {pulseKey > 0 && (
+        <div
+          key={pulseKey}
+          className="flex items-center gap-1.5 text-xs text-primary animate-in fade-in duration-300"
+        >
+          <Radio className="h-3 w-3 animate-pulse" />
+          <span>Live update</span>
+        </div>
+      )}
       {/* Page Header */}
       <div>
         <h1 className="text-base font-medium">Dashboard</h1>

@@ -30,10 +30,12 @@ import {
   Cpu,
   Loader2,
   AlertCircle,
+  Radio,
 } from 'lucide-react'
 import type { Agent, AgentStatus, Skill } from '@/types'
 import AgentFormDialog from '@/components/agents/agent-form-dialog'
 import { useWorkspace } from '@/hooks/use-workspace'
+import { useRealtime } from '@/lib/realtime-context'
 
 const STATUS_COLORS: Record<AgentStatus, string> = {
   idle: 'bg-emerald-500',
@@ -93,10 +95,12 @@ const SKILL_CATEGORY_COLORS: Record<string, string> = {
 
 export default function AgentsView() {
   const { workspaceId, loading: wsLoading, error: wsError } = useWorkspace()
+  const { onEvent } = useRealtime()
   const [agents, setAgents] = useState<Agent[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pulseKey, setPulseKey] = useState(0)
 
   // Dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -141,6 +145,22 @@ export default function AgentsView() {
     }
     fetchData()
   }, [fetchAgents, fetchSkills, workspaceId])
+
+  // Listen for realtime agent status changes — update in-place
+  useEffect(() => {
+    const unsub = onEvent('agent:status-changed', (data: unknown) => {
+      const payload = data as { agentId: string; status: AgentStatus }
+      if (payload?.agentId && payload?.status) {
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === payload.agentId ? { ...a, status: payload.status } : a
+          )
+        )
+        setPulseKey((k) => k + 1)
+      }
+    })
+    return unsub
+  }, [onEvent])
 
   async function handleToggleStatus(agent: Agent) {
     try {
@@ -201,6 +221,16 @@ export default function AgentsView() {
 
   return (
     <div className="space-y-6">
+      {/* Live update pulse */}
+      {pulseKey > 0 && (
+        <div
+          key={pulseKey}
+          className="flex items-center gap-1.5 text-xs text-primary animate-in fade-in duration-300"
+        >
+          <Radio className="h-3 w-3 animate-pulse" />
+          <span>Agent status updated live</span>
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

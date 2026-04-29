@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -15,6 +16,8 @@ import {
   ChevronRight,
   Settings,
   Layers,
+  LogIn,
+  LogOut,
 } from 'lucide-react'
 import DashboardView from '@/components/views/dashboard-view'
 import AgentsView from '@/components/views/agents-view'
@@ -24,6 +27,8 @@ import { SkillsView } from '@/components/views/skills-view'
 import { ProjectsView } from '@/components/views/projects-view'
 import { PatternsView } from '@/components/views/patterns-view'
 import { SettingsView } from '@/components/views/settings-view'
+import { RealtimeSetup } from '@/components/realtime/realtime-provider'
+import { ConnectionIndicator } from '@/components/realtime/connection-indicator'
 import { I18nProvider, useTranslation } from '@/lib/i18n'
 import type { Workspace, ViewType } from '@/types'
 
@@ -62,9 +67,57 @@ const getNavLabel = (key: Exclude<ViewType, 'settings'>, t: any): string => {
   }
 }
 
+// ==================== Auth Guard ====================
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession()
+
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center space-y-3">
+          <Layers className="h-8 w-8 text-muted-foreground/30 mx-auto animate-pulse" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'unauthenticated' || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
+        <div className="text-center space-y-6 max-w-sm px-4">
+          <div className="flex justify-center">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Layers className="h-8 w-8 text-primary" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight">AgentHub</h1>
+            <p className="text-muted-foreground">Sign in to continue to your workspace</p>
+          </div>
+          <Button
+            className="h-11 gap-2 px-8"
+            onClick={() => window.location.href = '/login'}
+          >
+            <LogIn className="h-4 w-4" />
+            Sign in to continue
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Multi-Agent Team Collaboration Platform
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
+
 // ==================== Main App Content ====================
 
 function AppContent() {
+  const { data: session } = useSession()
   const { t } = useTranslation()
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -218,173 +271,197 @@ function AppContent() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+    <RealtimeSetup workspaceId={workspaceId}>
+      <div className="flex h-screen overflow-hidden bg-background">
+        {/* Mobile overlay */}
+        {mobileMenuOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
 
-      {/* Sidebar - desktop */}
-      <aside
-        className={`hidden lg:flex ${
-          sidebarCollapsed ? 'w-14' : 'w-[220px]'
-        } border-r bg-card flex-col shrink-0 transition-all duration-200`}
-      >
-        {/* Workspace header */}
-        <div className="p-3 border-b">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Layers className="h-4 w-4 text-primary" />
+        {/* Sidebar - desktop */}
+        <aside
+          className={`hidden lg:flex ${
+            sidebarCollapsed ? 'w-14' : 'w-[220px]'
+          } border-r bg-card flex-col shrink-0 transition-all duration-200`}
+        >
+          {/* Workspace header */}
+          <div className="p-3 border-b">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Layers className="h-4 w-4 text-primary" />
+              </div>
+              {!sidebarCollapsed && (
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {workspace?.name || 'AgentHub'}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {workspace?.slug || ''}
+                  </p>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 p-2 space-y-0.5">
+            {NAV_KEYS.map((key) => {
+              const isActive = activeView === key
+              const label = getNavLabel(key, t)
+              return (
+                <Button
+                  key={key}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className={`w-full ${
+                    sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
+                  } h-9 text-sm gap-2`}
+                  onClick={() => handleNav(key)}
+                  title={sidebarCollapsed ? label : undefined}
+                >
+                  {NAV_ICONS[key]}
+                  {!sidebarCollapsed && <span>{label}</span>}
+                </Button>
+              )
+            })}
+          </nav>
+
+          {/* Bottom actions */}
+          <div className="p-2 border-t space-y-0.5">
+            <Button
+              variant={activeView === 'settings' ? 'secondary' : 'ghost'}
+              className={`w-full ${
+                sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
+              } h-9 text-sm gap-2 text-muted-foreground`}
+              onClick={() => handleNav('settings')}
+              title={sidebarCollapsed ? t.nav.settings : undefined}
+            >
+              <Settings className="h-4 w-4" />
+              {!sidebarCollapsed && <span>{t.nav.settings}</span>}
+            </Button>
+            <Button
+              variant="ghost"
+              className={`w-full ${
+                sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
+              } h-9 text-sm`}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+              {!sidebarCollapsed && <span className="ml-2">{t.nav.collapse}</span>}
+            </Button>
+            {session?.user && (
+              <Button
+                variant="ghost"
+                className={`w-full ${
+                  sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
+                } h-9 text-sm gap-2 text-muted-foreground hover:text-destructive`}
+                onClick={() => signOut({ callbackUrl: '/login' })}
+                title={sidebarCollapsed ? 'Sign out' : undefined}
+              >
+                <LogOut className="h-4 w-4" />
+                {!sidebarCollapsed && <span>Sign out</span>}
+              </Button>
+            )}
+            {/* Connection indicator in sidebar footer */}
             {!sidebarCollapsed && (
+              <div className="pt-1">
+                <ConnectionIndicator />
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Sidebar - mobile */}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-card border-r flex-col shrink-0 transition-transform duration-200 lg:hidden ${
+            mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="p-3 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Layers className="h-4 w-4 text-primary" />
+              </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">
                   {workspace?.name || 'AgentHub'}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate">
-                  {workspace?.slug || ''}
-                </p>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-0.5">
-          {NAV_KEYS.map((key) => {
-            const isActive = activeView === key
-            const label = getNavLabel(key, t)
-            return (
-              <Button
-                key={key}
-                variant={isActive ? 'secondary' : 'ghost'}
-                className={`w-full ${
-                  sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
-                } h-9 text-sm gap-2`}
-                onClick={() => handleNav(key)}
-                title={sidebarCollapsed ? label : undefined}
-              >
-                {NAV_ICONS[key]}
-                {!sidebarCollapsed && <span>{label}</span>}
-              </Button>
-            )
-          })}
-        </nav>
-
-        {/* Bottom actions */}
-        <div className="p-2 border-t space-y-0.5">
-          <Button
-            variant={activeView === 'settings' ? 'secondary' : 'ghost'}
-            className={`w-full ${
-              sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
-            } h-9 text-sm gap-2 text-muted-foreground`}
-            onClick={() => handleNav('settings')}
-            title={sidebarCollapsed ? t.nav.settings : undefined}
-          >
-            <Settings className="h-4 w-4" />
-            {!sidebarCollapsed && <span>{t.nav.settings}</span>}
-          </Button>
-          <Button
-            variant="ghost"
-            className={`w-full ${
-              sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
-            } h-9 text-sm`}
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <ChevronLeft className="h-4 w-4" />
-            )}
-            {!sidebarCollapsed && <span className="ml-2">{t.nav.collapse}</span>}
-          </Button>
-        </div>
-      </aside>
+            </Button>
+          </div>
 
-      {/* Sidebar - mobile */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-card border-r flex-col shrink-0 transition-transform duration-200 lg:hidden ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="p-3 border-b flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">
+          <nav className="flex-1 p-2 space-y-0.5">
+            {NAV_KEYS.map((key) => {
+              const isActive = activeView === key
+              const label = getNavLabel(key, t)
+              return (
+                <Button
+                  key={key}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className="w-full justify-start h-9 text-sm gap-2"
+                  onClick={() => handleNav(key)}
+                >
+                  {NAV_ICONS[key]}
+                  <span>{label}</span>
+                </Button>
+              )
+            })}
+            {/* Settings in mobile nav */}
+            <Button
+              variant={activeView === 'settings' ? 'secondary' : 'ghost'}
+              className="w-full justify-start h-9 text-sm gap-2"
+              onClick={() => handleNav('settings')}
+            >
+              <Settings className="h-4 w-4" />
+              <span>{t.nav.settings}</span>
+            </Button>
+          </nav>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Mobile header bar */}
+          <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-2 min-w-0">
+              <Layers className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-medium truncate">
                 {workspace?.name || 'AgentHub'}
-              </p>
+              </span>
+            </div>
+            <div className="ml-auto">
+              <ConnectionIndicator />
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </div>
 
-        <nav className="flex-1 p-2 space-y-0.5">
-          {NAV_KEYS.map((key) => {
-            const isActive = activeView === key
-            const label = getNavLabel(key, t)
-            return (
-              <Button
-                key={key}
-                variant={isActive ? 'secondary' : 'ghost'}
-                className="w-full justify-start h-9 text-sm gap-2"
-                onClick={() => handleNav(key)}
-              >
-                {NAV_ICONS[key]}
-                <span>{label}</span>
-              </Button>
-            )
-          })}
-          {/* Settings in mobile nav */}
-          <Button
-            variant={activeView === 'settings' ? 'secondary' : 'ghost'}
-            className="w-full justify-start h-9 text-sm gap-2"
-            onClick={() => handleNav('settings')}
-          >
-            <Settings className="h-4 w-4" />
-            <span>{t.nav.settings}</span>
-          </Button>
-        </nav>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile header bar */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center gap-2 min-w-0">
-            <Layers className="h-4 w-4 text-primary shrink-0" />
-            <span className="text-sm font-medium truncate">
-              {workspace?.name || 'AgentHub'}
-            </span>
+          {/* View content */}
+          <div className="flex-1 overflow-auto">
+            {renderView()}
           </div>
-        </div>
-
-        {/* View content */}
-        <div className="flex-1 overflow-auto">
-          {renderView()}
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </RealtimeSetup>
   )
 }
 
@@ -393,7 +470,9 @@ function AppContent() {
 export default function Home() {
   return (
     <I18nProvider>
-      <AppContent />
+      <AuthGuard>
+        <AppContent />
+      </AuthGuard>
     </I18nProvider>
   )
 }

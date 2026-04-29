@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { notifyAgentStatusChanged } from '@/lib/realtime-notify'
 
 // POST /api/agents/[id]/toggle-status - Toggle agent between idle/working
 export async function POST(
@@ -20,6 +21,11 @@ export async function POST(
       where: { id },
       data: { status: newStatus },
     })
+
+    // Notify realtime clients about the status change (fire and forget)
+    if (agent.workspaceId) {
+      notifyAgentStatusChanged(agent.workspaceId, id, newStatus)
+    }
 
     return NextResponse.json({
       agent: updated,

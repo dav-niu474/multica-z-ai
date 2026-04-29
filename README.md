@@ -29,6 +29,8 @@
 
 ## 📑 Table of Contents
 
+- [Architecture Overview](#-architecture-overview)
+- [Current Status & Roadmap](#-current-status--roadmap)
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
 - [Getting Started](#-getting-started)
@@ -39,11 +41,117 @@
   - [Run Development Server](#run-development-server)
 - [Project Structure](#-project-structure)
 - [API Reference](#-api-reference)
-- [Agent Orchestration Patterns](#-agent-orchestration-patterns)
-- [Multi-Provider AI Support](#-multi-provider-ai-support)
 - [Data Models](#-data-models)
-- [Screenshots](#-screenshots)
 - [License](#-license)
+
+---
+
+## 🏛 Architecture Overview
+
+AgentHub follows a layered, service-oriented architecture:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Web Collaboration Layer                  │
+│  Issue Board │ Agent Directory │ Autopilot Config │ Settings │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ WebSocket / REST API
+┌─────────────────────────▼───────────────────────────────────┐
+│                  Platform Orchestration Core                  │
+│  Task State Machine │ Event Bus │ Agent Registry & Discovery  │
+│  Session Manager │ Skill Retrieval │ Memory & Preferences     │
+└───────┬─────────────────┬─────────────────┬─────────────────┘
+        │                 │                 │
+ ┌──────▼──────┐  ┌───────▼───────┐  ┌──────▼──────┐
+ │ Local Daemon │  │ Local Daemon   │  │ Local Daemon │
+ │ (User A)     │  │ (User B)       │  │ (Server)     │
+ │ - CLI Probe  │  │ - CLI Probe    │  │ - Headless   │
+ │ - Agent Proc │  │ - Agent Proc   │  │ - Sandboxed  │
+ │ - Work Dir   │  │ - Work Dir     │  │ - Resource   │
+ └─────────────┘  └───────────────┘  └──────────────┘
+        │                 │                 │
+        └─────────────────┼─────────────────┘
+                          │ Report capabilities, pull tasks, push results
+┌─────────────────────────▼───────────────────────────────────┐
+│                   Infrastructure Services                    │
+│  PostgreSQL+pgvector │ Message Queue │ Object Storage        │
+│  Secret Management │ Monitoring & Logging                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 Current Status & Roadmap
+
+### Implementation Completeness
+
+| Layer | Completion | Status |
+|-------|-----------|--------|
+| **Web Collaboration UI** | 80% | ✅ Most views built, Autopilot Config pending |
+| **REST API (CRUD)** | 90% | ✅ 19 endpoints, full coverage |
+| **Real-time Infrastructure** | 20% | ⚠️ Socket.IO service exists but not wired |
+| **Authentication & Security** | 0% | ❌ NextAuth installed but not configured |
+| **Platform Orchestration Core** | 0% | ❌ No state machine, event bus, or registry |
+| **Local Daemon & Agent Execution** | 0% | ❌ Agents are DB records only, no process management |
+| **Infrastructure Services** | 15% | ✅ PostgreSQL only, missing pgvector/queues/storage/monitoring |
+
+### Development Roadmap
+
+#### 🔵 Phase 1 — Foundation & Connectivity (Current)
+
+> Goal: Make the platform secure, real-time, and AI-connected
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 1.1 | **Authentication** | Configure NextAuth.js v4 with GitHub provider; add `middleware.ts` to protect API routes; add login page; enforce RBAC (owner/admin/member) | 🔄 In Progress |
+| 1.2 | **Real-time Integration** | Wire Socket.IO into all views (Dashboard, Agents, Issues, Chat); API routes emit events on data changes; add reconnection UI indicator | 🔄 In Progress |
+| 1.3 | **AI Chat Completion** | Replace simulated `setTimeout` responses in Chat view with real `POST /api/chat/complete` streaming; add typing indicator; display token usage | 🔄 In Progress |
+| 1.4 | **Autopilot Config View** | New settings page for configuring AI model providers, default models, system prompts, and orchestration parameters | ⬜ Pending |
+
+#### 🟢 Phase 2 — Agent Execution Engine
+
+> Goal: Turn agents from database records into executable processes
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 2.1 | **Task State Machine** | Implement `queued → dispatched → running → completed/failed` transitions; add state transition guards and hooks | ⬜ Pending |
+| 2.2 | **Task Dispatcher** | Automatic issue → task creation based on agent skills/capacity; priority queue with `maxConcurrent` enforcement | ⬜ Pending |
+| 2.3 | **Agent Health Monitor** | Periodic health checks; auto-update agent status to offline on failure; heartbeat mechanism | ⬜ Pending |
+| 2.4 | **Agent Execution Runtime** | Sandbox for running agent tasks (invoke LLM APIs with agent instructions + context); capture output and token usage | ⬜ Pending |
+
+#### 🟡 Phase 3 — Orchestration & Events
+
+> Goal: Enable multi-agent collaboration patterns
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 3.1 | **Event Bus** | Internal pub/sub system for decoupled event-driven architecture; events: `task.created`, `task.completed`, `agent.status-changed`, `issue.updated` | ⬜ Pending |
+| 3.2 | **Task Queue** | Redis/BullMQ integration for async job processing; retry logic with exponential backoff; dead letter queue | ⬜ Pending |
+| 3.3 | **Orchestration Patterns** | Implement actual pattern executors: Direct, Pipeline, Fan-out, Router, Supervisor; selectable per-project | ⬜ Pending |
+| 3.4 | **Inter-Agent Communication** | Agents can request help from other agents; shared context passing; collaborative task completion | ⬜ Pending |
+
+#### 🟠 Phase 4 — Local Daemon & CLI
+
+> Goal: Enable agent execution on user machines
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 4.1 | **Agent Daemon** | Background process that manages agent lifecycle; auto-register with platform on startup; task polling and result pushing | ⬜ Pending |
+| 4.2 | **CLI Tool** | `agenthub` CLI for: install daemon, list agents, run task locally, check status, configure provider | ⬜ Pending |
+| 4.3 | **Work Directory Management** | Per-task isolated work directories; git integration for code changes; artifact collection | ⬜ Pending |
+| 4.4 | **Sandbox & Resource Limits** | CPU/memory/network isolation per agent; timeout enforcement; output size limits | ⬜ Pending |
+
+#### 🔴 Phase 5 — Infrastructure Hardening
+
+> Goal: Production-grade reliability and observability
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 5.1 | **pgvector Integration** | Semantic search for skills, issues, and agent matching; embedding generation and storage | ⬜ Pending |
+| 5.2 | **Object Storage** | File upload for avatars, issue attachments, agent output artifacts; S3-compatible API | ⬜ Pending |
+| 5.3 | **Secret Management** | Encrypted storage for API keys and credentials; per-workspace provider key management | ⬜ Pending |
+| 5.4 | **Monitoring & Observability** | Structured logging (pino); request tracing; APM integration (Sentry); dashboard metrics | ⬜ Pending |
+| 5.5 | **Multi-Workspace Routing** | Workspace switcher UI; scope all data operations to active workspace | ⬜ Pending |
 
 ---
 
@@ -70,36 +178,25 @@
 - **Comment system** — Threaded discussions from members and agents
 - **Label system** — JSON-based flexible categorization
 
-### 🛠 Skills
-- **Categorized skills** — Engineering, Testing, Review, Deployment, Security, Performance, Git, Documentation, Custom
-- **Rich content** — Markdown-based skill definitions with full descriptions
-- **Agent–skill linking** — Many-to-many relationship between agents and skills
+### 🛠 Skills & Tools
+- **Separated Skills & Tools tabs** — Skills (capabilities) vs Tools (executable utilities) are clearly distinguished
+- **Categorized** — Engineering, Testing, Review, Deployment, Security, Performance, Git, Documentation, Custom
+- **Rich content** — Markdown-based definitions with full descriptions
+- **Agent–skill linking** — Many-to-many relationship between agents and skills/tools
 
 ### 📁 Projects
 - **Lifecycle management** — Planned → In Progress → Paused → Completed
 - **Priority system** — None, Low, Medium, High, Urgent
 - **Issue aggregation** — Per-project issue counts and status breakdowns
 
-### 💬 Real-time Chat
+### 💬 Chat
 - Direct messaging with individual AI agents
 - Persistent chat sessions with full message history
 - Session management (create, archive, multiple threads)
-- Markdown rendering with syntax highlighting
-
-### 🌐 Multi-Provider AI
-Supports 6+ AI providers with unified chat completion API:
-- **NVIDIA NIM** — Llama 3.1, Mixtral, Nemotron, Qwen
-- **GLM (智谱AI)** — GLM-4-Plus, GLM-4-Long, GLM-4V-Plus, GLM-4-AllTools
-- **火山引擎 (豆包)** — Doubao Pro/Lite models
-- **OpenAI** — GPT-4o, GPT-4o Mini
-- **Anthropic Claude** — Claude Sonnet 4, Claude 3.5 Sonnet
-- **Google Gemini** — Gemini 2.5 Pro
-- **Custom** — Any OpenAI-compatible API endpoint
 
 ### 🎨 UI & Infrastructure
 - Responsive design (mobile-first, full desktop optimization)
 - Light/Dark theme with system-aware switching via next-themes
-- Real-time updates via Socket.io
 - Full i18n support (English / 中文)
 - Agent orchestration pattern reference guide
 
@@ -116,7 +213,8 @@ Supports 6+ AI providers with unified chat completion API:
 | **Components** | shadcn/ui (New York style) + Lucide Icons |
 | **Database** | PostgreSQL via Prisma ORM 6 (Vercel Neon) |
 | **State Management** | Zustand (client) + TanStack Query (server) |
-| **Real-time** | Socket.io Client |
+| **Real-time** | Socket.io |
+| **Auth** | NextAuth.js v4 |
 | **Forms** | React Hook Form + Zod 4 |
 | **Animations** | Framer Motion 12 |
 | **Theming** | next-themes |
@@ -159,9 +257,11 @@ Configure the required environment variables:
 # Database (PostgreSQL)
 DATABASE_URL="postgresql://user:password@host:5432/dbname?sslmode=require"
 
-# NextAuth (optional)
+# NextAuth
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret-here"
+GITHUB_ID="your-github-oauth-app-id"
+GITHUB_SECRET="your-github-oauth-app-secret"
 
 # AI Provider API Keys (configure as needed)
 NVIDIA_API_KEY=""
@@ -180,10 +280,9 @@ bun run db:generate
 
 # Push schema to database
 bun run db:push
-
-# (Optional) Seed with demo data after starting dev server
-# Visit http://localhost:3000/api/seed
 ```
+
+The app auto-initializes tables and seeds demo data on first visit via `POST /api/setup`.
 
 ### Run Development Server
 
@@ -212,49 +311,50 @@ multica-z-ai/
 │   │   ├── globals.css           # Global styles & CSS variables
 │   │   └── api/
 │   │       ├── agents/           # Agent CRUD + status toggle
-│   │       │   └── [id]/
-│   │       │       └── toggle-status/
 │   │       ├── projects/         # Project CRUD
-│   │       │   └── [id]/
 │   │       ├── issues/           # Issue CRUD
-│   │       │   └── [id]/
 │   │       ├── skills/           # Skill CRUD
-│   │       │   └── [id]/
-│   │       ├── chat/             # Chat sessions & messages
-│   │       │   ├── [id]/
-│   │       │   │   └── messages/
-│   │       │   └── complete/
+│   │       ├── chat/             # Chat sessions & AI completion
 │   │       ├── dashboard/        # Analytics endpoint
 │   │       ├── workspaces/       # Workspace management
+│   │       ├── auth/             # NextAuth authentication
 │   │       ├── models/           # Available AI models
 │   │       ├── health/           # Health check
-│   │       ├── setup/            # Initial setup
+│   │       ├── setup/            # Initial setup + seed
 │   │       └── seed/             # Demo data seeding
 │   ├── components/
 │   │   ├── ui/                   # shadcn/ui base components
 │   │   ├── views/                # Page-level view components
-│   │   ├── layout/               # Sidebar & page layout
 │   │   ├── agents/               # Agent form dialog
 │   │   ├── projects/             # Project form dialog
 │   │   ├── skills/               # Skill form dialog
 │   │   ├── issues/               # Issue form & detail panel
 │   │   └── chat/                 # Chat message component
-│   ├── hooks/                    # Custom React hooks
-│   ├── lib/                      # Utilities, API client, DB client, model providers
+│   ├── hooks/                    # Custom React hooks (useSocket, etc.)
+│   ├── lib/
+│   │   ├── i18n/                 # Internationalization (en/zh)
+│   │   ├── model-providers/      # Multi-provider AI abstraction
+│   │   ├── db.ts                 # Prisma client singleton
+│   │   └── utils.ts              # Utility functions
 │   ├── store/                    # Zustand state management
 │   ├── types/                    # TypeScript type definitions
-│   └── views/                    # View wrappers
+│   └── middleware.ts              # Auth & routing middleware
 ├── mini-services/
-│   └── realtime-service/         # Socket.io real-time service
-├── examples/                     # Example code
-│   └── websocket/
-├── .env.example                  # Environment variable template
+│   └── realtime-service/         # Socket.io real-time service (port 3003)
+├── Caddyfile                     # Reverse proxy config (port 81 → 3000/3003)
 └── package.json
 ```
 
 ---
 
 ## 📡 API Reference
+
+### Auth
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/auth/[...nextauth]` | NextAuth authentication endpoints |
+| `GET` | `/api/auth/session` | Get current session |
 
 ### Agents
 
@@ -265,108 +365,25 @@ multica-z-ai/
 | `GET` | `/api/agents/[id]` | Get agent details |
 | `PUT` | `/api/agents/[id]` | Update an agent |
 | `DELETE` | `/api/agents/[id]` | Delete an agent |
-| `POST` | `/api/agents/[id]/toggle-status` | Toggle agent online/offline status |
+| `POST` | `/api/agents/[id]/toggle-status` | Toggle agent status |
 
-### Projects
+### Projects / Issues / Skills / Chat
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/projects` | List projects with issue counts |
-| `POST` | `/api/projects` | Create a project |
-| `GET` | `/api/projects/[id]` | Get project details |
-| `PUT` | `/api/projects/[id]` | Update a project |
-| `DELETE` | `/api/projects/[id]` | Delete a project |
+Full CRUD for projects, issues, skills, and chat sessions/messages. See [API Reference](#-api-reference) for details.
 
-### Issues
+### System
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/issues` | List issues (filterable) |
-| `POST` | `/api/issues` | Create an issue |
-| `GET` | `/api/issues/[id]` | Get issue details |
-| `PUT` | `/api/issues/[id]` | Update an issue |
-| `DELETE` | `/api/issues/[id]` | Delete an issue |
-
-### Skills
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/skills` | List skills with agent links |
-| `POST` | `/api/skills` | Create a skill |
-| `GET` | `/api/skills/[id]` | Get skill details |
-| `PUT` | `/api/skills/[id]` | Update a skill |
-| `DELETE` | `/api/skills/[id]` | Delete a skill |
-
-### Chat
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/chat` | List chat sessions |
-| `POST` | `/api/chat` | Create a chat session |
-| `GET` | `/api/chat/[id]/messages` | Get messages for a session |
-| `POST` | `/api/chat/[id]/messages` | Send a message |
-| `POST` | `/api/chat/complete` | AI chat completion |
-
-### Other
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/dashboard` | Workspace analytics & stats |
+| `GET` | `/api/dashboard` | Workspace analytics |
 | `GET` | `/api/workspaces` | List workspaces |
-| `POST` | `/api/workspaces` | Create a workspace |
-| `GET` | `/api/models` | List available AI models |
+| `POST` | `/api/setup` | Initialize database + seed |
+| `GET` | `/api/models` | Available AI models |
 | `GET` | `/api/health` | Health check |
-| `POST` | `/api/setup` | Initial workspace setup |
-| `POST` | `/api/seed` | Seed demo data |
-
----
-
-## 🔄 Agent Orchestration Patterns
-
-AgentHub includes a built-in reference guide for common agent orchestration patterns:
-
-| Pattern | Description |
-|---------|-------------|
-| **Direct Invocation** | Single agent handles a task end-to-end |
-| **Pipeline** | Sequential chain of agents, each processing the output of the previous |
-| **Fan-out** | Parallel dispatch to multiple agents, results aggregated |
-| **Router** | A classifier agent routes tasks to specialized agents |
-| **Supervisor** | A supervisor agent delegates, monitors, and coordinates sub-agents |
-| **Mixture of Agents** | Layered architecture with proposer and aggregator roles |
-
-These patterns help teams design effective multi-agent workflows for different complexity levels.
-
----
-
-## 🤖 Multi-Provider AI Support
-
-AgentHub provides a unified `chatCompletion` and `streamChatCompletion` API that works across all supported providers. Configure API keys in environment variables to enable providers dynamically.
-
-```typescript
-import { chatCompletion, streamChatCompletion } from '@/lib/model-providers'
-
-// Non-streaming completion
-const response = await chatCompletion({
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-20250514',
-  messages: [{ role: 'user', content: 'Hello!' }],
-})
-
-// Streaming completion
-for await (const chunk of streamChatCompletion({
-  provider: 'glm',
-  model: 'glm-4-plus',
-  messages: [{ role: 'user', content: '你好！' }],
-})) {
-  process.stdout.write(chunk)
-}
-```
 
 ---
 
 ## 🗃 Data Models
-
-The platform defines **13 models** in the Prisma schema:
 
 | Model | Description |
 |-------|-------------|
@@ -374,7 +391,7 @@ The platform defines **13 models** in the Prisma schema:
 | `User` | User accounts with email & avatar |
 | `Member` | Workspace membership with roles (owner/admin/member) |
 | `Agent` | AI agent configurations with provider, instructions, status |
-| `Skill` | Reusable skill cards with category & content |
+| `Skill` | Reusable skill/tool cards with type, category & content |
 | `AgentSkill` | Many-to-many agent ↔ skill relationship |
 | `Project` | Project containers with status & priority |
 | `Issue` | Task/issue tracking with full lifecycle |
@@ -383,12 +400,6 @@ The platform defines **13 models** in the Prisma schema:
 | `ChatSession` | Conversation threads with agents |
 | `ChatMessage` | Individual messages in chat sessions |
 | `ActivityLog` | Audit trail for workspace events |
-
----
-
-## 📸 Screenshots
-
-> Screenshots coming soon. In the meantime, visit the [live demo](https://multica-z-ai.vercel.app) to explore the platform.
 
 ---
 

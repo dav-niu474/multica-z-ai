@@ -234,7 +234,7 @@ const zh: TranslationKeys = {
     noMessagesYet: '暂无消息',
     sendMessagePlaceholder: (name?: string) =>
       `发送消息给 ${name || '智能体'}...`,
-    sendHint: '按 Enter 发送',
+    sendHint: 'Enter 发送，Shift+Enter 换行',
     selectConversation: '选择一个会话',
     selectOrCreate: '选择一个会话或创建新会话',
     // 对话框
@@ -247,6 +247,17 @@ const zh: TranslationKeys = {
     receivedProcessing: (name: string) =>
       `[${name}] 已收到你的消息。正在处理你的请求，将尽快回复。`,
     messageReceived: '消息已收到。正在处理...',
+    // AI 聊天
+    thinking: '思考中...',
+    generating: '正在生成回复...',
+    noProviderConfigured: '未配置 AI 提供商',
+    noProviderHint: '请在设置中配置 API 密钥，或选择一个已配置提供商的智能体。',
+    sendFailed: '发送消息失败',
+    aiError: 'AI 错误',
+    modelLabel: '模型',
+    tokensUsed: (n: number) => `${n} tokens`,
+    promptTokens: (n: number) => `${n} 输入 tokens`,
+    completionTokens: (n: number) => `${n} 输出 tokens`,
   },
 
   // ==================== 技能分类 ====================

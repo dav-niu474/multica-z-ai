@@ -29,78 +29,168 @@
 
 ## 📑 目录
 
+- [系统架构](#-系统架构)
+- [当前状态与开发路线图](#-当前状态与开发路线图)
 - [功能特性](#-功能特性)
 - [技术栈](#-技术栈)
 - [快速开始](#-快速开始)
-  - [前置要求](#前置要求)
-  - [安装](#安装)
-  - [环境变量](#环境变量)
-  - [数据库配置](#数据库配置)
-  - [启动开发服务器](#启动开发服务器)
 - [项目结构](#-项目结构)
 - [API 文档](#-api-文档)
-- [Agent 编排模式](#-agent-编排模式)
-- [多供应商 AI 支持](#-多供应商-ai-支持)
 - [数据模型](#-数据模型)
-- [截图](#-截图)
 - [许可证](#-许可证)
+
+---
+
+## 🏛 系统架构
+
+AgentHub 采用分层、面向服务的架构设计：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Web 协作界面                           │
+│  Issue Board │ Agent Directory │ Autopilot Config │ 偏好面板 │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ WebSocket / REST API
+┌─────────────────────────▼───────────────────────────────────┐
+│                    平台调度核心 (Orchestrator)                │
+│  - 任务状态机 - 事件总线 (Event Bus) - Agent 注册与发现       │
+│  - Session Manager - Skill 检索 - MemoryAgent 偏好查询       │
+└───────┬─────────────────┬─────────────────┬─────────────────┘
+        │                 │                 │
+ ┌──────▼──────┐  ┌───────▼───────┐  ┌──────▼──────┐
+ │ 本地 Daemon │  │ 本地 Daemon   │  │ 本地 Daemon │
+ │ (用户 A)    │  │ (用户 B)      │  │ (服务器集群)│
+ │ - CLI 探测  │  │ - CLI 探测    │  │ - 无头运行   │
+ │ - Agent 进程│  │ - Agent 进程  │  │ - 沙箱隔离   │
+ │ - 工作目录  │  │ - 工作目录    │  │ - 资源限制   │
+ └─────────────┘  └───────────────┘  └──────────────┘
+        │                 │                 │
+        └─────────────────┼─────────────────┘
+                          │ 上报能力、拉取任务、推送结果
+┌─────────────────────────▼───────────────────────────────────┐
+│                     基础服务层                                │
+│  数据库 (PostgreSQL + pgvector) │ 消息队列 (BullMQ/Redis)   │
+│  对象存储 │ 密钥管理 │ 监控日志                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 当前状态与开发路线图
+
+### 实现完成度
+
+| 层级 | 完成度 | 状态 |
+|------|--------|------|
+| **Web 协作界面** | 80% | ✅ 大部分视图已完成，Autopilot Config 待建 |
+| **REST API（CRUD）** | 90% | ✅ 19 个端点，全覆盖 |
+| **实时基础设施** | 20% | ⚠️ Socket.IO 服务已搭建但未接入视图 |
+| **认证与安全** | 0% | ❌ NextAuth 已安装但未配置 |
+| **平台调度核心** | 0% | ❌ 无状态机、事件总线或注册机制 |
+| **本地 Daemon 与 Agent 执行** | 0% | ❌ Agent 仅是数据库记录，无进程管理 |
+| **基础服务层** | 15% | ✅ 仅有 PostgreSQL，缺 pgvector/队列/存储/监控 |
+
+### 开发路线图
+
+#### 🔵 Phase 1 — 基础连接（当前阶段）
+
+> 目标：让平台具备安全性、实时性和 AI 对话能力
+
+| # | 任务 | 描述 | 状态 |
+|---|------|------|------|
+| 1.1 | **认证系统** | 配置 NextAuth.js v4 GitHub 登录；添加 `middleware.ts` 保护 API 路由；登录页面；RBAC 权限控制 (owner/admin/member) | 🔄 进行中 |
+| 1.2 | **实时接入** | 将 Socket.IO 接入所有视图（Dashboard、Agents、Issues、Chat）；API 路由变更时发送事件；重连 UI 指示器 | 🔄 进行中 |
+| 1.3 | **AI 聊天补全** | 替换 Chat 视图中的模拟响应为真实 `POST /api/chat/complete` 流式调用；输入指示器；Token 用量显示 | 🔄 进行中 |
+| 1.4 | **Autopilot 配置页** | 新建设置页面：AI 模型供应商配置、默认模型、系统提示词、编排参数 | ⬜ 待开发 |
+
+#### 🟢 Phase 2 — Agent 执行引擎
+
+> 目标：将 Agent 从数据库记录转变为可执行进程
+
+| # | 任务 | 描述 | 状态 |
+|---|------|------|------|
+| 2.1 | **任务状态机** | 实现 `queued → dispatched → running → completed/failed` 状态转换；状态守卫和钩子 | ⬜ 待开发 |
+| 2.2 | **任务调度器** | 基于 Agent 技能/容量自动创建 issue → task；优先级队列，`maxConcurrent` 并发控制 | ⬜ 待开发 |
+| 2.3 | **Agent 健康监控** | 定期健康检查；失败自动标记离线；心跳机制 | ⬜ 待开发 |
+| 2.4 | **Agent 执行运行时** | Agent 任务沙箱（使用 Agent 指令 + 上下文调用 LLM API）；捕获输出和 Token 用量 | ⬜ 待开发 |
+
+#### 🟡 Phase 3 — 编排与事件
+
+> 目标：实现多 Agent 协作模式
+
+| # | 任务 | 描述 | 状态 |
+|---|------|------|------|
+| 3.1 | **事件总线** | 内部发布/订阅系统；事件：`task.created`、`task.completed`、`agent.status-changed`、`issue.updated` | ⬜ 待开发 |
+| 3.2 | **任务队列** | Redis/BullMQ 异步任务处理；指数退避重试；死信队列 | ⬜ 待开发 |
+| 3.3 | **编排模式实现** | 实际模式执行器：直接调用、流水线、扇出、路由器、监督者；可按项目选择 | ⬜ 待开发 |
+| 3.4 | **Agent 间通信** | Agent 可请求其他 Agent 协助；共享上下文传递；协作完成任务 | ⬜ 待开发 |
+
+#### 🟠 Phase 4 — 本地 Daemon 与 CLI
+
+> 目标：在用户机器上执行 Agent
+
+| # | 任务 | 描述 | 状态 |
+|---|------|------|------|
+| 4.1 | **Agent Daemon** | 管理Agent生命周期的后台进程；启动时自动注册到平台；任务轮询和结果推送 | ⬜ 待开发 |
+| 4.2 | **CLI 工具** | `agenthub` CLI：安装 daemon、列出 agent、本地执行任务、检查状态、配置供应商 | ⬜ 待开发 |
+| 4.3 | **工作目录管理** | 每任务隔离工作目录；Git 集成管理代码变更；产物收集 | ⬜ 待开发 |
+| 4.4 | **沙箱与资源限制** | CPU/内存/网络隔离；超时强制终止；输出大小限制 | ⬜ 待开发 |
+
+#### 🔴 Phase 5 — 基础设施加固
+
+> 目标：生产级可靠性和可观测性
+
+| # | 任务 | 描述 | 状态 |
+|---|------|------|------|
+| 5.1 | **pgvector 集成** | 技能、Issue、Agent 匹配的语义搜索；向量生成和存储 | ⬜ 待开发 |
+| 5.2 | **对象存储** | 头像、Issue 附件、Agent 输出产物的文件上传；S3 兼容 API | ⬜ 待开发 |
+| 5.3 | **密钥管理** | API 密钥和凭证的加密存储；按工作空间的供应商密钥管理 | ⬜ 待开发 |
+| 5.4 | **监控与可观测性** | 结构化日志 (pino)；请求追踪；APM 集成 (Sentry)；仪表盘指标 | ⬜ 待开发 |
+| 5.5 | **多工作空间路由** | 工作空间切换 UI；所有数据操作限定在当前工作空间范围内 | ⬜ 待开发 |
 
 ---
 
 ## ✨ 功能特性
 
 ### 📊 仪表盘
-- 实时数据分析 — Agent 状态概览、Issue 分布、任务进度和项目健康度
-- 活动动态流 — 工作空间实时事件流，包括 Agent 操作和 Issue 更新
-- 项目进度跟踪 — 活跃项目的可视化进度条
+- 实时数据分析 — Agent 状态概览、Issue 分布、任务进度
+- 活动动态流 — 工作空间实时事件
+- 项目进度跟踪 — 活跃项目的可视化进度
 
 ### 🤖 Agent 管理
-- **多供应商支持** — Claude、OpenAI、Gemini、NVIDIA NIM、GLM (智谱AI)、火山引擎 (豆包) 或自定义供应商
-- **自定义指令** — 为每个 Agent 设置系统提示词，定义行为和能力
-- **技能分配** — 将可复用技能卡片附加到 Agent（Code Review、TDD、Security Audit 等）
-- **状态监控** — 实时 Agent 状态跟踪（空闲、工作中、阻塞、错误、离线）
-- **环境配置** — 每个 Agent 独立的环境变量和命令行参数
-- **MCP 服务器配置** — Model Context Protocol 集成，支持高级工具调用
+- **多供应商支持** — Claude、OpenAI、Gemini、NVIDIA NIM、GLM (智谱AI)、火山引擎 (豆包)、自定义供应商
+- **自定义指令** — 为每个 Agent 设置系统提示词
+- **技能分配** — 将可复用技能卡片附加到 Agent
+- **状态监控** — 实时 Agent 状态跟踪
+- **环境配置** — 每个 Agent 独立的环境变量
 
 ### 📋 Issue 跟踪
 - **看板式工作流** — 待办 → 执行中 → 评审中 → 已完成 / 已取消
 - **优先级排序** — 可视化优先级徽章，支持拖放
-- **灵活分配** — Issue 可分配给人类成员或 AI Agent
-- **活动日志** — Issue 生命周期事件的完整审计跟踪
-- **评论系统** — 支持成员和 Agent 的评论讨论
-- **标签系统** — 基于 JSON 的灵活分类
+- **灵活分配** — 可分配给人类成员或 AI Agent
+- **活动日志** — 完整审计跟踪
+- **评论系统** — 成员和 Agent 的讨论
 
-### 🛠 技能
-- **分类技能** — 工程、测试、审查、部署、安全、性能、Git、文档、自定义
-- **富文本内容** — 基于 Markdown 的技能定义，包含完整描述
-- **Agent-技能关联** — Agent 与技能之间的多对多关系
+### 🛠 技能与工具
+- **技能/工具分离** — 技能（能力）与工具（可执行程序）清晰区分，独立 Tab 展示
+- **分类管理** — 工程、测试、审查、部署、安全、性能、Git、文档、自定义
+- **富文本内容** — Markdown 格式的技能定义
+- **Agent 关联** — 多对多关系
 
 ### 📁 项目
 - **生命周期管理** — 计划中 → 进行中 → 暂停 → 已完成
-- **优先级系统** — 无、低、中、高、紧急五个优先级
-- **Issue 聚合** — 每个项目聚合其关联的 Issue 及状态分布
+- **优先级系统** — 无、低、中、高、紧急
+- **Issue 聚合** — 每个项目聚合 Issue 统计
 
-### 💬 实时聊天
-- 与单个 AI Agent 的直接消息界面
-- 持久化聊天会话，完整消息记录
-- 会话管理（创建、归档、多个对话线程）
-- 支持语法高亮的 Markdown 渲染
-
-### 🌐 多供应商 AI
-支持 6+ AI 供应商，统一聊天补全 API：
-- **NVIDIA NIM** — Llama 3.1、Mixtral、Nemotron、Qwen
-- **GLM (智谱AI)** — GLM-4-Plus、GLM-4-Long、GLM-4V-Plus、GLM-4-AllTools
-- **火山引擎 (豆包)** — 豆包 Pro/Lite 系列模型
-- **OpenAI** — GPT-4o、GPT-4o Mini
-- **Anthropic Claude** — Claude Sonnet 4、Claude 3.5 Sonnet
-- **Google Gemini** — Gemini 2.5 Pro
-- **Custom** — 任何兼容 OpenAI API 的端点
+### 💬 聊天
+- 与 AI Agent 的直接对话
+- 持久化会话与完整消息记录
+- 会话管理
 
 ### 🎨 UI 与基础设施
-- 响应式设计（移动优先，完整桌面端优化）
-- 明暗主题切换，支持系统感知（next-themes）
-- Socket.io 驱动的实时数据同步
-- 完整的国际化支持（English / 中文）
+- 响应式设计（移动优先）
+- 明暗主题切换
+- 完整国际化（English / 中文）
 - Agent 编排模式参考指南
 
 ---
@@ -114,9 +204,10 @@
 | **UI 库** | React 19 |
 | **样式** | Tailwind CSS 4 + tailwindcss-animate |
 | **组件库** | shadcn/ui (New York 风格) + Lucide Icons |
-| **数据库** | PostgreSQL，通过 Prisma ORM 6 (Vercel Neon) |
+| **数据库** | PostgreSQL (Prisma ORM 6, Vercel Neon) |
 | **状态管理** | Zustand (客户端) + TanStack Query (服务端) |
-| **实时通信** | Socket.io Client |
+| **实时通信** | Socket.io |
+| **认证** | NextAuth.js v4 |
 | **表单** | React Hook Form + Zod 4 |
 | **动画** | Framer Motion 12 |
 | **主题** | next-themes |
@@ -131,39 +222,34 @@
 
 ### 前置要求
 
-- [Bun](https://bun.sh/) v1.0+（推荐）或 [Node.js](https://nodejs.org/) 18+
-- [PostgreSQL](https://www.postgresql.org/) 数据库（推荐使用 [Vercel Neon](https://neon.tech/) 作为生产环境数据库）
+- [Bun](https://bun.sh/) v1.0+ 或 [Node.js](https://nodejs.org/) 18+
+- [PostgreSQL](https://www.postgresql.org/) 数据库
 
 ### 安装
 
 ```bash
-# 克隆仓库
 git clone https://github.com/dav-niu474/multica-z-ai.git
 cd multica-z-ai
-
-# 安装依赖
 bun install
 ```
 
 ### 环境变量
 
-在项目根目录创建 `.env.local` 文件：
-
 ```bash
 cp .env.example .env.local
 ```
 
-配置必要的环境变量：
-
 ```env
-# 数据库 (PostgreSQL)
+# 数据库
 DATABASE_URL="postgresql://user:password@host:5432/dbname?sslmode=require"
 
-# NextAuth (可选)
+# NextAuth
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret-here"
+GITHUB_ID="your-github-oauth-app-id"
+GITHUB_SECRET="your-github-oauth-app-secret"
 
-# AI 供应商 API 密钥 (按需配置)
+# AI 供应商 API 密钥（按需配置）
 NVIDIA_API_KEY=""
 GLM_API_KEY=""
 VOLCANO_API_KEY=""
@@ -175,20 +261,15 @@ GEMINI_API_KEY=""
 ### 数据库配置
 
 ```bash
-# 生成 Prisma 客户端
 bun run db:generate
-
-# 推送数据库 Schema
 bun run db:push
-
-# (可选) 启动开发服务器后填充演示数据
-# 访问 http://localhost:3000/api/seed
 ```
+
+首次访问时，应用会自动通过 `POST /api/setup` 初始化表结构并填充演示数据。
 
 ### 启动开发服务器
 
 ```bash
-# 在 3000 端口启动开发服务器
 bun run dev
 ```
 
@@ -200,195 +281,58 @@ bun run dev
 
 ```
 multica-z-ai/
-├── prisma/
-│   └── schema.prisma            # 数据库 Schema (13 个模型)
-├── public/
-│   ├── logo.svg                  # 应用 Logo
-│   └── robots.txt                # SEO 配置
+├── prisma/schema.prisma            # 数据库 Schema (13 个模型)
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx            # 根布局与 Provider
-│   │   ├── page.tsx              # 主应用页面
-│   │   ├── globals.css           # 全局样式与 CSS 变量
-│   │   └── api/
-│   │       ├── agents/           # Agent CRUD + 状态切换
-│   │       │   └── [id]/
-│   │       │       └── toggle-status/
-│   │       ├── projects/         # 项目 CRUD
-│   │       │   └── [id]/
-│   │       ├── issues/           # Issue CRUD
-│   │       │   └── [id]/
-│   │       ├── skills/           # 技能 CRUD
-│   │       │   └── [id]/
-│   │       ├── chat/             # 聊天会话与消息
-│   │       │   ├── [id]/
-│   │       │   │   └── messages/
-│   │       │   └── complete/
-│   │       ├── dashboard/        # 数据分析端点
-│   │       ├── workspaces/       # 工作空间管理
-│   │       ├── models/           # 可用 AI 模型列表
-│   │       ├── health/           # 健康检查
-│   │       ├── setup/            # 初始化设置
-│   │       └── seed/             # 演示数据填充
+│   │   ├── page.tsx                # 主应用页面
+│   │   └── api/                    # API 路由 (19+ 端点)
 │   ├── components/
-│   │   ├── ui/                   # shadcn/ui 基础组件
-│   │   ├── views/                # 页面级视图组件
-│   │   ├── layout/               # 侧边栏与页面布局
-│   │   ├── agents/               # Agent 表单对话框
-│   │   ├── projects/             # 项目表单对话框
-│   │   ├── skills/               # 技能表单对话框
-│   │   ├── issues/               # Issue 表单与详情面板
-│   │   └── chat/                 # 聊天消息组件
-│   ├── hooks/                    # 自定义 React Hooks
-│   ├── lib/                      # 工具函数、API 客户端、数据库客户端、模型供应商
-│   ├── store/                    # Zustand 状态管理
-│   ├── types/                    # TypeScript 类型定义
-│   └── views/                    # 视图包装器
-├── mini-services/
-│   └── realtime-service/         # Socket.io 实时服务
-├── examples/                     # 示例代码
-│   └── websocket/
-├── .env.example                  # 环境变量模板
-└── package.json
+│   │   ├── ui/                     # shadcn/ui 组件库
+│   │   └── views/                  # 页面视图组件
+│   ├── hooks/                      # 自定义 Hooks (useSocket 等)
+│   ├── lib/
+│   │   ├── i18n/                   # 国际化 (en/zh)
+│   │   ├── model-providers/        # 多供应商 AI 抽象层
+│   │   └── db.ts                   # Prisma 客户端
+│   └── types/                      # TypeScript 类型定义
+├── mini-services/realtime-service/ # Socket.io 实时服务 (端口 3003)
+└── Caddyfile                       # 反向代理配置
 ```
 
 ---
 
 ## 📡 API 文档
 
-### Agent
+### 认证
 
 | 方法 | 端点 | 描述 |
 |------|------|------|
-| `GET` | `/api/agents` | 列出所有 Agent |
-| `POST` | `/api/agents` | 创建 Agent |
-| `GET` | `/api/agents/[id]` | 获取 Agent 详情 |
-| `PUT` | `/api/agents/[id]` | 更新 Agent |
-| `DELETE` | `/api/agents/[id]` | 删除 Agent |
-| `POST` | `/api/agents/[id]/toggle-status` | 切换 Agent 在线/离线状态 |
+| `GET` | `/api/auth/[...nextauth]` | NextAuth 认证端点 |
+| `GET` | `/api/auth/session` | 获取当前会话 |
 
-### 项目
+### Agent / 项目 / Issue / 技能 / 聊天
 
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| `GET` | `/api/projects` | 列出项目及 Issue 统计 |
-| `POST` | `/api/projects` | 创建项目 |
-| `GET` | `/api/projects/[id]` | 获取项目详情 |
-| `PUT` | `/api/projects/[id]` | 更新项目 |
-| `DELETE` | `/api/projects/[id]` | 删除项目 |
-
-### Issue
-
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| `GET` | `/api/issues` | 列出 Issue（可筛选） |
-| `POST` | `/api/issues` | 创建 Issue |
-| `GET` | `/api/issues/[id]` | 获取 Issue 详情 |
-| `PUT` | `/api/issues/[id]` | 更新 Issue |
-| `DELETE` | `/api/issues/[id]` | 删除 Issue |
-
-### 技能
-
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| `GET` | `/api/skills` | 列出技能及关联 Agent |
-| `POST` | `/api/skills` | 创建技能 |
-| `GET` | `/api/skills/[id]` | 获取技能详情 |
-| `PUT` | `/api/skills/[id]` | 更新技能 |
-| `DELETE` | `/api/skills/[id]` | 删除技能 |
-
-### 聊天
-
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| `GET` | `/api/chat` | 列出聊天会话 |
-| `POST` | `/api/chat` | 创建聊天会话 |
-| `GET` | `/api/chat/[id]/messages` | 获取会话消息 |
-| `POST` | `/api/chat/[id]/messages` | 发送消息 |
-| `POST` | `/api/chat/complete` | AI 聊天补全 |
-
-### 其他
-
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| `GET` | `/api/dashboard` | 工作空间分析与统计数据 |
-| `GET` | `/api/workspaces` | 列出工作空间 |
-| `POST` | `/api/workspaces` | 创建工作空间 |
-| `GET` | `/api/models` | 列出可用 AI 模型 |
-| `GET` | `/api/health` | 健康检查 |
-| `POST` | `/api/setup` | 初始化工作空间设置 |
-| `POST` | `/api/seed` | 填充演示数据 |
-
----
-
-## 🔄 Agent 编排模式
-
-AgentHub 内置了常见 Agent 编排模式的参考指南：
-
-| 模式 | 描述 |
-|------|------|
-| **直接调用** | 单个 Agent 端到端处理任务 |
-| **流水线** | Agent 顺序链式执行，每个处理上一个的输出 |
-| **扇出** | 并行分发给多个 Agent，结果聚合 |
-| **路由器** | 分类器 Agent 将任务路由到专门的 Agent |
-| **监督者** | 监督者 Agent 分派、监控和协调子 Agent |
-| **混合 Agent** | 分层架构，包含提议者和聚合者角色 |
-
-这些模式帮助团队针对不同复杂度设计高效的多 Agent 工作流。
-
----
-
-## 🤖 多供应商 AI 支持
-
-AgentHub 提供统一的 `chatCompletion` 和 `streamChatCompletion` API，跨所有支持的供应商工作。在环境变量中配置 API 密钥即可动态启用供应商。
-
-```typescript
-import { chatCompletion, streamChatCompletion } from '@/lib/model-providers'
-
-// 非流式补全
-const response = await chatCompletion({
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-20250514',
-  messages: [{ role: 'user', content: 'Hello!' }],
-})
-
-// 流式补全
-for await (const chunk of streamChatCompletion({
-  provider: 'glm',
-  model: 'glm-4-plus',
-  messages: [{ role: 'user', content: '你好！' }],
-})) {
-  process.stdout.write(chunk)
-}
-```
+完整的 CRUD 端点，详见 [English README](README.md#-api-reference)。
 
 ---
 
 ## 🗃 数据模型
 
-平台在 Prisma Schema 中定义了 **13 个数据模型**：
-
 | 模型 | 描述 |
 |------|------|
 | `Workspace` | 团队顶层容器 |
-| `User` | 用户账号（邮箱与头像） |
-| `Member` | 工作空间成员角色（owner/admin/member） |
-| `Agent` | AI Agent 配置（供应商、指令、状态） |
-| `Skill` | 可复用技能卡片（分类与内容） |
-| `AgentSkill` | Agent 与技能的多对多关联 |
-| `Project` | 项目容器（状态与优先级） |
-| `Issue` | 任务/Issue 跟踪（完整生命周期） |
-| `Comment` | Issue 评论（来自成员和 Agent） |
-| `AgentTask` | Agent 执行记录（含 Token 用量） |
-| `ChatSession` | 与 Agent 的对话会话 |
-| `ChatMessage` | 聊天会话中的单条消息 |
-| `ActivityLog` | 工作空间活动审计日志 |
-
----
-
-## 📸 截图
-
-> 截图即将上线。在此期间，请访问 [在线演示](https://multica-z-ai.vercel.app) 体验平台功能。
+| `User` | 用户账号 |
+| `Member` | 工作空间成员角色 (owner/admin/member) |
+| `Agent` | AI Agent 配置 |
+| `Skill` | 技能/工具卡片（类型区分） |
+| `AgentSkill` | Agent ↔ 技能多对多关联 |
+| `Project` | 项目容器 |
+| `Issue` | Issue 跟踪（完整生命周期） |
+| `Comment` | Issue 评论 |
+| `AgentTask` | Agent 执行记录 |
+| `ChatSession` | 对话会话 |
+| `ChatMessage` | 聊天消息 |
+| `ActivityLog` | 活动审计日志 |
 
 ---
 

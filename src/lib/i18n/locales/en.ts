@@ -232,7 +232,7 @@ const en = {
     noMessagesYet: 'No messages yet',
     sendMessagePlaceholder: (name?: string) =>
       `Message ${name || 'agent'}...`,
-    sendHint: 'Press Enter to send',
+    sendHint: 'Enter to send, Shift+Enter for new line',
     selectConversation: 'Select a conversation',
     selectOrCreate: 'Select a conversation or create a new one',
     // Dialog
@@ -245,6 +245,17 @@ const en = {
     receivedProcessing: (name: string) =>
       `[${name}] Received your message. I'm processing your request and will respond shortly.`,
     messageReceived: 'Message received. Processing...',
+    // AI Chat
+    thinking: 'Thinking...',
+    generating: 'Generating response...',
+    noProviderConfigured: 'No AI provider configured',
+    noProviderHint: 'Please set up an API key in Settings or select an agent with a provider.',
+    sendFailed: 'Failed to send message',
+    aiError: 'AI Error',
+    modelLabel: 'Model',
+    tokensUsed: (n: number) => `${n} tokens`,
+    promptTokens: (n: number) => `${n} prompt tokens`,
+    completionTokens: (n: number) => `${n} completion tokens`,
   },
 
   // ==================== Skill Categories ====================

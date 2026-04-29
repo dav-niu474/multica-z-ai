@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { notifyChatMessageReceived } from '@/lib/realtime-notify'
 
 // GET /api/chat/[id]/messages - Get all messages for a chat session
 export async function GET(
@@ -91,6 +92,17 @@ export async function POST(
       where: { id },
       data: updateData,
     })
+
+    // Notify realtime clients about the new message (fire and forget)
+    if (session.workspaceId) {
+      notifyChatMessageReceived(session.workspaceId, id, {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt.toISOString(),
+        sessionId: id,
+      })
+    }
 
     return NextResponse.json(message, { status: 201 })
   } catch (error) {

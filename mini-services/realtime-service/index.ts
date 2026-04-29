@@ -1,39 +1,104 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { Server } from "socket.io";
 
-const PORT = 3003;
+const SOCKET_PORT = 3003;
+const HTTP_PORT = 3004;
 
-const httpServer = createServer();
+// =========================================================================
+// REST HTTP Server — for server-side emit triggers (port 3004)
+// =========================================================================
 
-const io = new Server(httpServer, {
-  // DO NOT change the path — Caddy uses it to forward to the correct port
-  path: "/",
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
+const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${HTTP_PORT}`);
+
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // Health check
+  if (req.method === "GET" && url.pathname === "/") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        service: "agenthub-realtime-http",
+        port: HTTP_PORT,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      })
+    );
+    return;
+  }
+
+  // Emit endpoint
+  if (req.method === "POST" && url.pathname === "/emit") {
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      try {
+        const payload = JSON.parse(body);
+        const { room, event, data } = payload;
+
+        if (!room || !event) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "room and event are required" }));
+          return;
+        }
+
+        const roomName = `workspace:${room}`;
+        io.to(roomName).emit(event, {
+          ...data,
+          timestamp: new Date().toISOString(),
+        });
+
+        console.log(
+          `[realtime] HTTP emit → room ${roomName}, event ${event}`
+        );
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, room: roomName, event }));
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not found" }));
 });
 
-// Health endpoint — prepend so it runs BEFORE Engine.IO's handler.
-// With path: "/", Engine.IO intercepts all requests; we intercept
-// plain HTTP GET / (without EIO query param) for health checks.
-httpServer.prependListener("request", (req: IncomingMessage, res: ServerResponse) => {
-  const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+// =========================================================================
+// Socket.IO Server — for real-time client connections (port 3003)
+// =========================================================================
 
-  // Only handle non-Socket.IO requests (no EIO query param)
+const socketHttpServer = createServer();
+
+// Health endpoint on Socket.IO port (via prependListener, before engine.io)
+socketHttpServer.prependListener("request", (req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${SOCKET_PORT}`);
+
   if (!url.searchParams.has("EIO")) {
     if (req.method === "GET" && url.pathname === "/") {
-      res.writeHead(200, { "Content-Type": "application/json" });
       const activeRooms = Array.from(io.sockets.adapter.rooms.keys()).filter(
         (room) => !io.sockets.sockets.has(room as string)
       );
+      res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
           status: "ok",
           service: "agenthub-realtime",
-          port: PORT,
+          port: SOCKET_PORT,
           uptime: process.uptime(),
           connectedClients: io.sockets.sockets.size,
           activeWorkspaces: activeRooms.length,
@@ -41,11 +106,45 @@ httpServer.prependListener("request", (req: IncomingMessage, res: ServerResponse
           timestamp: new Date().toISOString(),
         })
       );
+    } else if (req.method === "POST" && url.pathname === "/emit") {
+      // Also support emit on the Socket.IO port for convenience
+      let body = "";
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      req.on("end", () => {
+        try {
+          const payload = JSON.parse(body);
+          const { room, event, data } = payload;
+          if (!room || !event) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "room and event are required" }));
+            return;
+          }
+          const roomName = `workspace:${room}`;
+          io.to(roomName).emit(event, { ...data, timestamp: new Date().toISOString() });
+          console.log(`[realtime] HTTP emit → room ${roomName}, event ${event}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true, room: roomName, event }));
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid JSON body" }));
+        }
+      });
     } else {
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found" }));
     }
   }
+  // Don't handle Socket.IO requests (with EIO param) — let engine.io handle them
+});
+
+const io = new Server(socketHttpServer, {
+  // DO NOT change the path — Caddy uses it to forward to the correct port
+  path: "/",
+  cors: false,
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 // ---------------------------------------------------------------------------
@@ -59,7 +158,6 @@ interface WorkspaceMember {
   workspaceId: string;
 }
 
-/** Track which users are in which workspace rooms */
 const workspaceMembers = new Map<string, WorkspaceMember[]>();
 
 function getMembers(workspaceId: string): WorkspaceMember[] {
@@ -94,14 +192,10 @@ function removeAllMembersForSocket(socketId: string) {
 io.on("connection", (socket) => {
   console.log(`[realtime] Client connected: ${socket.id}`);
 
-  // -----------------------------------------------------------------------
-  // join-workspace
-  // -----------------------------------------------------------------------
   socket.on(
     "join-workspace",
     (data: { workspaceId: string; userId: string; username: string }) => {
       const { workspaceId, userId, username } = data;
-
       const roomName = `workspace:${workspaceId}`;
       socket.join(roomName);
 
@@ -113,14 +207,8 @@ io.on("connection", (socket) => {
       };
       addMember(member);
 
-      // Notify the joining client about current room occupants
       const members = getMembers(workspaceId);
-      socket.emit("workspace:members", {
-        workspaceId,
-        members,
-      });
-
-      // Broadcast that a new member joined to everyone else in the room
+      socket.emit("workspace:members", { workspaceId, members });
       socket.to(roomName).emit("workspace:member-joined", {
         member: { userId, username },
         workspaceId,
@@ -128,39 +216,26 @@ io.on("connection", (socket) => {
       });
 
       console.log(
-        `[realtime] ${username} (user ${userId}) joined workspace ${workspaceId} — room now has ${members.length} member(s)`
+        `[realtime] ${username} joined workspace ${workspaceId} — ${members.length} member(s)`
       );
     }
   );
 
-  // -----------------------------------------------------------------------
-  // leave-workspace
-  // -----------------------------------------------------------------------
   socket.on(
     "leave-workspace",
     (data: { workspaceId: string; userId: string; username: string }) => {
       const { workspaceId, userId, username } = data;
       const roomName = `workspace:${workspaceId}`;
-
       socket.leave(roomName);
       removeMember(socket.id, workspaceId);
-
       socket.to(roomName).emit("workspace:member-left", {
-        userId,
-        username,
-        workspaceId,
+        userId, username, workspaceId,
         timestamp: new Date().toISOString(),
       });
-
-      console.log(
-        `[realtime] ${username} (user ${userId}) left workspace ${workspaceId}`
-      );
+      console.log(`[realtime] ${username} left workspace ${workspaceId}`);
     }
   );
 
-  // -----------------------------------------------------------------------
-  // issue:update — broadcast issue changes to the workspace room
-  // -----------------------------------------------------------------------
   socket.on(
     "issue:update",
     (data: {
@@ -176,15 +251,10 @@ io.on("connection", (socket) => {
         updatedBy: data.updatedBy,
         timestamp: new Date().toISOString(),
       });
-      console.log(
-        `[realtime] Issue ${data.issueId} updated in workspace ${data.workspaceId} by ${data.updatedBy}`
-      );
+      console.log(`[realtime] Issue ${data.issueId} updated in ${data.workspaceId}`);
     }
   );
 
-  // -----------------------------------------------------------------------
-  // agent:status — broadcast agent status changes
-  // -----------------------------------------------------------------------
   socket.on(
     "agent:status",
     (data: {
@@ -200,15 +270,10 @@ io.on("connection", (socket) => {
         details: data.details ?? {},
         timestamp: new Date().toISOString(),
       });
-      console.log(
-        `[realtime] Agent ${data.agentId} status → ${data.status} in workspace ${data.workspaceId}`
-      );
+      console.log(`[realtime] Agent ${data.agentId} → ${data.status} in ${data.workspaceId}`);
     }
   );
 
-  // -----------------------------------------------------------------------
-  // chat:message — broadcast chat messages
-  // -----------------------------------------------------------------------
   socket.on(
     "chat:message",
     (data: {
@@ -229,22 +294,17 @@ io.on("connection", (socket) => {
         timestamp: new Date().toISOString(),
       };
       io.to(roomName).emit("chat:message-received", enriched);
-      console.log(
-        `[realtime] Chat from ${data.senderName} in workspace ${data.workspaceId}: "${data.message.slice(0, 80)}"`
-      );
+      console.log(`[realtime] Chat from ${data.senderName} in ${data.workspaceId}`);
     }
   );
 
-  // -----------------------------------------------------------------------
-  // task:progress — broadcast task progress
-  // -----------------------------------------------------------------------
   socket.on(
     "task:progress",
     (data: {
       workspaceId: string;
       taskId: string;
       agentId: string;
-      progress: number; // 0–100
+      progress: number;
       status: "pending" | "in_progress" | "completed" | "failed";
       message?: string;
     }) => {
@@ -257,35 +317,31 @@ io.on("connection", (socket) => {
         message: data.message ?? "",
         timestamp: new Date().toISOString(),
       });
-      console.log(
-        `[realtime] Task ${data.taskId} progress ${data.progress}% (${data.status}) in workspace ${data.workspaceId}`
-      );
+      console.log(`[realtime] Task ${data.taskId} ${data.progress}% (${data.status})`);
     }
   );
 
-  // -----------------------------------------------------------------------
-  // disconnect
-  // -----------------------------------------------------------------------
   socket.on("disconnect", (reason) => {
     console.log(`[realtime] Client disconnected: ${socket.id} (${reason})`);
     removeAllMembersForSocket(socket.id);
   });
 
-  // -----------------------------------------------------------------------
-  // error
-  // -----------------------------------------------------------------------
   socket.on("error", (error) => {
     console.error(`[realtime] Socket error (${socket.id}):`, error);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Start server
+// Start servers
 // ---------------------------------------------------------------------------
 
-httpServer.listen(PORT, () => {
-  console.log(`[realtime] AgentHub Realtime Service listening on port ${PORT}`);
-  console.log(`[realtime] Health endpoint: http://localhost:${PORT}/`);
+socketHttpServer.listen(SOCKET_PORT, () => {
+  console.log(`[realtime] Socket.IO server listening on port ${SOCKET_PORT}`);
+});
+
+httpServer.listen(HTTP_PORT, () => {
+  console.log(`[realtime] HTTP REST server listening on port ${HTTP_PORT}`);
+  console.log(`[realtime] Emit endpoint: http://localhost:${HTTP_PORT}/emit`);
 });
 
 // ---------------------------------------------------------------------------
@@ -295,11 +351,12 @@ httpServer.listen(PORT, () => {
 function shutdown(signal: string) {
   console.log(`[realtime] Received ${signal}, shutting down...`);
   io.close();
-  httpServer.close(() => {
-    console.log("[realtime] Server closed");
-    process.exit(0);
+  socketHttpServer.close(() => {
+    httpServer.close(() => {
+      console.log("[realtime] Servers closed");
+      process.exit(0);
+    });
   });
-  // Force exit after 5 s if graceful shutdown hangs
   setTimeout(() => process.exit(1), 5000);
 }
 

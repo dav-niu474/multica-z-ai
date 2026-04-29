@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { notifyIssueUpdated } from '@/lib/realtime-notify'
 
 // GET /api/issues/[id] - Get single issue with full details
 export async function GET(
@@ -164,6 +165,19 @@ export async function PUT(
     const result = {
       ...issue,
       labels: issue.labels ? JSON.parse(issue.labels) : [],
+    }
+
+    // Notify realtime clients about the issue update
+    const changes: Record<string, unknown> = {}
+    if (status !== undefined) changes.status = status
+    if (priority !== undefined) changes.priority = priority
+    if (title !== undefined) changes.title = title
+    if (assigneeId !== undefined) changes.assigneeId = assigneeId
+    if (projectId !== undefined) changes.projectId = projectId
+
+    // Fire and forget — don't block the response
+    if (issue.workspaceId && Object.keys(changes).length > 0) {
+      notifyIssueUpdated(issue.workspaceId, id, changes)
     }
 
     return NextResponse.json(result)
