@@ -5,20 +5,29 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
+  // Priority order for database URL:
+  // 1. DATABASE_URL (explicitly configured, works for both queries and schema ops)
+  // 2. multicaZai_POSTGRES_PRISMA_URL (Vercel Postgres integration, optimized for Prisma)
+  // 3. POSTGRES_PRISMA_URL (standard Vercel Postgres integration)
+  // 4. POSTGRES_URL (Vercel Postgres pooling URL)
+  // 5. multicaZai_POSTGRES_URL (Vercel Postgres custom store pooling URL)
   const url =
     process.env.DATABASE_URL ||
+    process.env.multicaZai_POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
     process.env.POSTGRES_URL ||
     process.env.multicaZai_POSTGRES_URL
 
   if (!url) {
     throw new Error(
-      'DATABASE_URL is not set. Please configure it in Vercel dashboard.'
+      'DATABASE_URL is not set. Please configure it in Vercel dashboard or .env file.'
     )
   }
 
+  const isProduction = process.env.NODE_ENV === 'production'
+
   return new PrismaClient({
-    datasourceUrl: url,
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    log: isProduction ? ['error'] : ['error', 'warn'],
   })
 }
 

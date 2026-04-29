@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const workspaceId = searchParams.get('workspaceId')
     const category = searchParams.get('category')
 
-    const skills = await db.skill.findMany({
+    const skills = await db().skill.findMany({
       where: {
         ...(workspaceId ? { workspaceId } : {}),
         ...(category && category !== 'all' ? { category } : {}),
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const skill = await db.skill.create({
+    const skill = await db().skill.create({
       data: {
         name,
         description: description || null,

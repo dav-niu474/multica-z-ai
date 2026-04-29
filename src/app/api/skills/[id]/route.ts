@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const skill = await db.skill.findUnique({
+    const skill = await db().skill.findUnique({
       where: { id },
       include: {
         agents: {
@@ -45,7 +45,7 @@ export async function PUT(
     const body = await request.json()
     const { name, description, content, category, source } = body
 
-    const skill = await db.skill.update({
+    const skill = await db().skill.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
@@ -70,7 +70,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.skill.delete({ where: { id } })
+    await db().skill.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting skill:', error)

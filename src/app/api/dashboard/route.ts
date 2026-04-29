@@ -95,17 +95,23 @@ export async function GET(request: NextRequest) {
         },
       }),
 
-      // Agent task status distribution
+      // Agent task status distribution (filtered to this workspace)
       db().agentTask.groupBy({
         by: ['status'],
+        where: {
+          agent: { workspaceId },
+        },
         _count: {
           status: true,
         },
       }),
 
-      // Currently running tasks
+      // Currently running tasks (filtered to this workspace)
       db().agentTask.findMany({
-        where: { status: 'running' },
+        where: {
+          status: 'running',
+          agent: { workspaceId },
+        },
         include: {
           agent: {
             select: { id: true, name: true, avatar: true, provider: true },
