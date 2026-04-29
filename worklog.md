@@ -339,3 +339,26 @@ Stage Summary:
 - 修复了两个核心问题：db.ts 未传 datasource URL 给 PrismaClient，setup 路由不支持表重建
 - 所有 API 端点验证通过：health, workspaces, agents, projects, issues, skills, dashboard, chat, models
 - 生产环境 URL: https://multica-z-ai.vercel.app
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: 实现 Settings 功能、国际化(i18n)中英文切换、双语 README
+
+Work Log:
+- 分析 page.tsx 发现 Settings 按钮没有 onClick 处理函数
+- 创建完整 i18n 系统: src/lib/i18n/index.tsx (I18nProvider + useTranslation hook)
+- 创建英文翻译: src/lib/i18n/locales/en.ts (涵盖所有页面文本)
+- 创建中文翻译: src/lib/i18n/locales/zh.ts
+- 创建 Settings 视图: src/components/views/settings-view.tsx (语言切换、主题、关于)
+- 在 src/types/index.ts 中添加 ViewType 类型（包含 'settings'）
+- 重写 src/app/page.tsx: 集成 I18nProvider、连接 Settings 视图、导航使用翻译
+- 更新 src/store/app-store.ts 添加 locale 状态
+- 创建 README.md (英文) 和 README_CN.md (中文)
+- Lint 通过，build 通过，部署成功
+
+Stage Summary:
+- Settings 页面完全可用：语言切换(EN/ZH)、主题选择、关于信息
+- i18n 系统完整：所有页面文本都有中英文翻译
+- 本地存储语言偏好（localStorage key: agenthub-locale）
+- 生产环境: https://multica-z-ai.vercel.app
