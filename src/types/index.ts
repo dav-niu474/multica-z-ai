@@ -1,5 +1,8 @@
 // AgentHub - Type definitions matching Prisma schema
 
+// ============ VIEW TYPES ============
+export type ViewType = 'dashboard' | 'agents' | 'issues' | 'chat' | 'skills' | 'projects' | 'patterns' | 'settings'
+
 // ============ BASE ============
 export interface BaseRecord {
   id: string

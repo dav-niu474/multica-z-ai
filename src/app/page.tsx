@@ -23,38 +23,56 @@ import ChatView from '@/components/views/chat-view'
 import { SkillsView } from '@/components/views/skills-view'
 import { ProjectsView } from '@/components/views/projects-view'
 import { PatternsView } from '@/components/views/patterns-view'
-import type { Workspace } from '@/types'
+import { SettingsView } from '@/components/views/settings-view'
+import { I18nProvider, useTranslation } from '@/lib/i18n'
+import type { Workspace, ViewType } from '@/types'
 
-type ViewKey = 'dashboard' | 'agents' | 'issues' | 'chat' | 'skills' | 'projects' | 'patterns'
+// ==================== Navigation Items ====================
 
-interface NavItem {
-  key: ViewKey
-  label: string
-  icon: React.ReactNode
+const NAV_ICONS: Record<Exclude<ViewType, 'settings'>, React.ReactNode> = {
+  dashboard: <LayoutDashboard className="h-4 w-4" />,
+  agents: <Bot className="h-4 w-4" />,
+  issues: <Kanban className="h-4 w-4" />,
+  skills: <Zap className="h-4 w-4" />,
+  projects: <FolderKanban className="h-4 w-4" />,
+  chat: <MessageSquare className="h-4 w-4" />,
+  patterns: <BookOpen className="h-4 w-4" />,
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
-  { key: 'agents', label: 'Agents', icon: <Bot className="h-4 w-4" /> },
-  { key: 'issues', label: 'Issues', icon: <Kanban className="h-4 w-4" /> },
-  { key: 'skills', label: 'Skills', icon: <Zap className="h-4 w-4" /> },
-  { key: 'projects', label: 'Projects', icon: <FolderKanban className="h-4 w-4" /> },
-  { key: 'chat', label: 'Chat', icon: <MessageSquare className="h-4 w-4" /> },
-  { key: 'patterns', label: 'Patterns', icon: <BookOpen className="h-4 w-4" /> },
+const NAV_KEYS: Exclude<ViewType, 'settings'>[] = [
+  'dashboard',
+  'agents',
+  'issues',
+  'skills',
+  'projects',
+  'chat',
+  'patterns',
 ]
 
-export default function Home() {
+const NAV_LABEL_KEYS: Record<Exclude<ViewType, 'settings'>, string> = {
+  dashboard: 'nav.dashboard',
+  agents: 'nav.agents',
+  issues: 'nav.issues',
+  skills: 'nav.skills',
+  projects: 'nav.projects',
+  chat: 'nav.chat',
+  patterns: 'nav.patterns',
+}
+
+// ==================== Main App Content ====================
+
+function AppContent() {
+  const { t } = useTranslation()
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [workspaceId, setWorkspaceId] = useState<string>('')
-  const [activeView, setActiveView] = useState<ViewKey>('dashboard')
+  const [activeView, setActiveView] = useState<ViewType>('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    // Setup database tables + seed demo data, then load workspace
     fetch('/api/setup', { method: 'POST' })
-      .catch(() => {}) // Ignore if already set up
+      .catch(() => {})
       .finally(() => {
         fetch('/api/workspaces')
           .then((r) => r.json())
@@ -69,19 +87,24 @@ export default function Home() {
       })
   }, [])
 
+  const handleNav = useCallback((view: ViewType) => {
+    setActiveView(view)
+    setMobileMenuOpen(false)
+  }, [])
+
   const renderView = useCallback(() => {
-    if (!workspaceId) {
+    if (!workspaceId && activeView !== 'settings') {
       return (
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-3">
             <Layers className="h-12 w-12 text-muted-foreground/20 mx-auto" />
-            <p className="text-sm text-muted-foreground">No workspace found.</p>
+            <p className="text-sm text-muted-foreground">{t.workspace.noWorkspaceFound}</p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => window.location.reload()}
             >
-              Retry
+              {t.common.retry}
             </Button>
           </div>
         </div>
@@ -103,10 +126,12 @@ export default function Home() {
         return <ChatView workspaceId={workspaceId} />
       case 'patterns':
         return <PatternsView />
+      case 'settings':
+        return <SettingsView />
       default:
         return null
     }
-  }, [activeView, workspaceId])
+  }, [activeView, workspaceId, t])
 
   if (loading) {
     return (
@@ -119,7 +144,7 @@ export default function Home() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
             <Layers className="h-8 w-8 text-muted-foreground/30 mx-auto animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading workspace...</p>
+            <p className="text-sm text-muted-foreground">{t.workspace.loadingWorkspace}</p>
           </div>
         </div>
       </div>
@@ -163,20 +188,21 @@ export default function Home() {
 
         {/* Navigation */}
         <nav className="flex-1 p-2 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const isActive = activeView === item.key
+          {NAV_KEYS.map((key) => {
+            const isActive = activeView === key
+            const label = t[NAV_LABEL_KEYS[key] as keyof typeof t] as string
             return (
               <Button
-                key={item.key}
+                key={key}
                 variant={isActive ? 'secondary' : 'ghost'}
                 className={`w-full ${
                   sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
                 } h-9 text-sm gap-2`}
-                onClick={() => setActiveView(item.key)}
-                title={sidebarCollapsed ? item.label : undefined}
+                onClick={() => handleNav(key)}
+                title={sidebarCollapsed ? label : undefined}
               >
-                {item.icon}
-                {!sidebarCollapsed && <span>{item.label}</span>}
+                {NAV_ICONS[key]}
+                {!sidebarCollapsed && <span>{label}</span>}
               </Button>
             )
           })}
@@ -185,14 +211,15 @@ export default function Home() {
         {/* Bottom actions */}
         <div className="p-2 border-t space-y-0.5">
           <Button
-            variant="ghost"
+            variant={activeView === 'settings' ? 'secondary' : 'ghost'}
             className={`w-full ${
               sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
             } h-9 text-sm gap-2 text-muted-foreground`}
-            title={sidebarCollapsed ? 'Settings' : undefined}
+            onClick={() => handleNav('settings')}
+            title={sidebarCollapsed ? t.nav.settings : undefined}
           >
             <Settings className="h-4 w-4" />
-            {!sidebarCollapsed && <span>Settings</span>}
+            {!sidebarCollapsed && <span>{t.nav.settings}</span>}
           </Button>
           <Button
             variant="ghost"
@@ -206,7 +233,7 @@ export default function Home() {
             ) : (
               <ChevronLeft className="h-4 w-4" />
             )}
-            {!sidebarCollapsed && <span className="ml-2">Collapse</span>}
+            {!sidebarCollapsed && <span className="ml-2">{t.nav.collapse}</span>}
           </Button>
         </div>
       </aside>
@@ -239,23 +266,30 @@ export default function Home() {
         </div>
 
         <nav className="flex-1 p-2 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const isActive = activeView === item.key
+          {NAV_KEYS.map((key) => {
+            const isActive = activeView === key
+            const label = t[NAV_LABEL_KEYS[key] as keyof typeof t] as string
             return (
               <Button
-                key={item.key}
+                key={key}
                 variant={isActive ? 'secondary' : 'ghost'}
                 className="w-full justify-start h-9 text-sm gap-2"
-                onClick={() => {
-                  setActiveView(item.key)
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleNav(key)}
               >
-                {item.icon}
-                <span>{item.label}</span>
+                {NAV_ICONS[key]}
+                <span>{label}</span>
               </Button>
             )
           })}
+          {/* Settings in mobile nav */}
+          <Button
+            variant={activeView === 'settings' ? 'secondary' : 'ghost'}
+            className="w-full justify-start h-9 text-sm gap-2"
+            onClick={() => handleNav('settings')}
+          >
+            <Settings className="h-4 w-4" />
+            <span>{t.nav.settings}</span>
+          </Button>
         </nav>
       </aside>
 
@@ -285,5 +319,15 @@ export default function Home() {
         </div>
       </main>
     </div>
+  )
+}
+
+// ==================== Root with I18nProvider ====================
+
+export default function Home() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   )
 }

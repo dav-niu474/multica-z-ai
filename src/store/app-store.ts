@@ -15,6 +15,9 @@ interface AppState {
   workspaceId: string;
   workspaceName: string;
 
+  // Locale
+  locale: 'en' | 'zh';
+
   // Actions
   setView: (view: ViewType) => void;
   toggleSidebar: () => void;
@@ -23,6 +26,7 @@ interface AppState {
   selectIssue: (id: string | null) => void;
   selectChat: (id: string | null) => void;
   setWorkspace: (id: string, name: string) => void;
+  setLocale: (locale: 'en' | 'zh') => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -34,6 +38,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedChatId: null,
   workspaceId: '',
   workspaceName: 'AgentHub',
+  locale: 'en',
 
   // Actions
   setView: (view) => set({ currentView: view }),
@@ -43,4 +48,5 @@ export const useAppStore = create<AppState>((set) => ({
   selectIssue: (id) => set({ selectedIssueId: id }),
   selectChat: (id) => set({ selectedChatId: id }),
   setWorkspace: (id, name) => set({ workspaceId: id, workspaceName: name }),
+  setLocale: (locale) => set({ locale }),
 }));
