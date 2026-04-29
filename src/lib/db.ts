@@ -4,15 +4,7 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-let _db: PrismaClient | undefined
-
-function getDb(): PrismaClient {
-  if (_db) return _db
-  if (globalForPrisma.prisma) {
-    _db = globalForPrisma.prisma
-    return _db
-  }
-
+function createPrismaClient() {
   const url =
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
@@ -24,26 +16,27 @@ function getDb(): PrismaClient {
     )
   }
 
-  const client = new PrismaClient({
+  return new PrismaClient({
     datasourceUrl: url,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
-
-  _db = client
-  if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = client
-  }
-  return client
 }
 
-// Use a proxy so `db.workspace.findMany()` works but initialization
-// is deferred until the first actual database call.
-export const db = new Proxy({} as PrismaClient, {
-  get(_target, prop, receiver) {
-    const instance = getDb()
-    const value = Reflect.get(instance, prop, receiver)
+// Lazy singleton: created on first access, reused afterward
+// In Vercel serverless, this ensures env vars are loaded before Prisma init
+let _prisma: PrismaClient | undefined
+
+export const db: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_, prop) {
+    if (!_prisma) {
+      _prisma = globalForPrisma.prisma ?? createPrismaClient()
+      if (process.env.NODE_ENV !== 'production') {
+        globalForPrisma.prisma = _prisma
+      }
+    }
+    const value = Reflect.get(_prisma!, prop)
     if (typeof value === 'function') {
-      return value.bind(instance)
+      return value.bind(_prisma)
     }
     return value
   },
