@@ -4,12 +4,15 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-function createPrismaClient() {
-  // On Vercel, DATABASE_URL is injected as env var at build/runtime.
-  // For local dev, it comes from .env files loaded by Next.js.
-  //
-  // We pass datasourceUrl explicitly because Turbopack may not pass
-  // process.env to Prisma's native engine at schema validation time.
+let _db: PrismaClient | undefined
+
+function getDb(): PrismaClient {
+  if (_db) return _db
+  if (globalForPrisma.prisma) {
+    _db = globalForPrisma.prisma
+    return _db
+  }
+
   const url =
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
@@ -17,16 +20,31 @@ function createPrismaClient() {
 
   if (!url) {
     throw new Error(
-      'DATABASE_URL is not set. Please configure it in .env or Vercel dashboard.'
+      'DATABASE_URL is not set. Please configure it in Vercel dashboard.'
     )
   }
 
-  return new PrismaClient({
+  const client = new PrismaClient({
     datasourceUrl: url,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
+
+  _db = client
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = client
+  }
+  return client
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+// Use a proxy so `db.workspace.findMany()` works but initialization
+// is deferred until the first actual database call.
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const instance = getDb()
+    const value = Reflect.get(instance, prop, receiver)
+    if (typeof value === 'function') {
+      return value.bind(instance)
+    }
+    return value
+  },
+})
