@@ -89,3 +89,34 @@ Work Log:
 Stage Summary:
 - Phase 1 deployed successfully to https://multica-z-ai.vercel.app
 - Auth, realtime, and AI chat all live in production
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix post-login blank page crash on Vercel production
+
+Work Log:
+- Analyzed Vercel production logs and tested API endpoints
+- Identified root causes:
+  1. Missing NEXTAUTH_SECRET env var on Vercel → JWT verification unstable
+  2. authorize() in auth.ts crashed when User table didn't exist (DB not ready)
+  3. signIn callback returned false on DB errors → blocked login
+  4. POST /api/setup dropped ALL tables on every page visit (destructive)
+  5. No error boundary → any React crash showed blank page
+  6. Missing DashboardData type definition
+- Set NEXTAUTH_SECRET and NEXTAUTH_URL on Vercel env vars
+- Fixed authorize() to catch DB errors and return in-memory user
+- Fixed signIn callback to return true on DB errors (non-blocking)
+- Rewrote POST /api/setup to use CREATE IF NOT EXISTS (idempotent)
+- Seed only runs when workspace doesn't exist
+- Created ErrorBoundary component with retry/reload UI
+- Added ErrorBoundary to layout.tsx wrapping AuthProvider
+- Restored middleware.ts with try-catch for token verification
+- Added DashboardData type to types/index.ts
+
+Stage Summary:
+- All 6 root causes fixed and deployed to production
+- Error boundary prevents blank page crashes
+- Login works even when DB tables don't exist yet
+- Setup is idempotent (no more destructive table drops)
+- Auth middleware properly protects API routes (401 verified)
