@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, createContext, useContext } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 
 // ==================== Lightweight Auth Context ====================
@@ -30,7 +31,7 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   // Start with loading=false so AuthGuard shows the sign-in prompt immediately
   // instead of a loading spinner during SSR. Auth check happens via useEffect.

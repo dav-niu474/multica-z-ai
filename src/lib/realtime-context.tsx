@@ -1,6 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { io, type Socket } from 'socket.io-client'
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,7 @@ export function useRealtime() {
 
 interface RealtimeProviderProps {
   workspaceId: string
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function RealtimeProvider({ workspaceId, children }: RealtimeProviderProps) {

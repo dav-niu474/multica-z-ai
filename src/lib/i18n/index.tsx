@@ -1,6 +1,6 @@
 'use client';
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -8,6 +8,7 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
+import type { ReactNode } from 'react';
 import type { TranslationKeys } from './locales/en';
 import en from './locales/en';
 import zh from './locales/zh';
@@ -34,7 +35,7 @@ const DEFAULT_LOCALE: Locale = 'en';
 // ==================== Provider ====================
 
 interface I18nProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
   initialLocale?: Locale;
 }
 
