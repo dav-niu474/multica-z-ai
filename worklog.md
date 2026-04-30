@@ -205,3 +205,33 @@ Stage Summary:
 - Fixed by using the correct AuthProvider import in layout.tsx
 - Login flow now works: /login → signin → cookie set → redirect / → AuthGuard checks /api/me → authenticated → show app
 - Production URL: https://multica-z-ai.vercel.app
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Fix "useCallback is not defined" runtime error after login
+
+Work Log:
+- After login, page redirected to / but showed ErrorBoundary "Something went wrong"
+- Error message: "useCallback is not defined"
+- Used agent-browser to automate login and capture exact error
+- Root cause #1 (contributing): Multiple files used `import React, { useCallback } from 'react'`
+  pattern which causes issues with Turbopack on Vercel
+  Fixed files: auth-session.tsx, i18n/index.tsx, realtime-context.tsx, error-boundary.tsx, page.tsx
+  Changed to pure named imports: `import { useCallback, useState } from 'react'`
+- Root cause #2 (PRIMARY): dashboard-view.tsx used useCallback but only imported
+  useState and useEffect. Missing import caused ReferenceError.
+- Fix: Added useCallback to dashboard-view.tsx react imports
+- Verified via browser automation:
+  1. Login page loads with no errors ✓
+  2. Fill credentials and submit ✓
+  3. Redirect to / ✓
+  4. Dashboard renders with all content ✓
+  5. Sidebar navigation present ✓
+  6. Stats cards, agent list, charts all visible ✓
+  7. Zero console errors ✓
+
+Stage Summary:
+- Two-layer bug: (1) import pattern issue, (2) missing useCallback import in dashboard-view
+- Full end-to-end login flow verified via browser automation
+- Production URL: https://multica-z-ai.vercel.app
