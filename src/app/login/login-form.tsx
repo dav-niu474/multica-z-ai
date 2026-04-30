@@ -1,9 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Layers, Github, Loader2, Eye, EyeOff } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Layers, Loader2, Eye, EyeOff } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,30 +12,31 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ hasGitHub }: LoginFormProps) {
-  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      const res = await fetch('/api/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
 
-      if (result?.error) {
-        setError("Invalid email or password. Try alex@agenthub.dev / demo123")
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        // Success - redirect to main page
+        window.location.href = '/'
       } else {
-        router.push("/")
-        router.refresh()
+        setError(data.error || "Invalid email or password. Try alex@agenthub.dev / demo123")
       }
     } catch {
       setError("An unexpected error occurred. Please try again.")
@@ -46,17 +45,10 @@ export function LoginForm({ hasGitHub }: LoginFormProps) {
     }
   }
 
-  const handleGitHubSignIn = () => {
-    signIn("github", {
-      callbackUrl: "/",
-    })
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
       <Card className="w-full max-w-md shadow-lg border-border/50">
         <CardHeader className="text-center space-y-4 pb-2">
-          {/* Branding */}
           <div className="flex justify-center">
             <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
               <Layers className="h-7 w-7 text-primary" />
@@ -73,40 +65,13 @@ export function LoginForm({ hasGitHub }: LoginFormProps) {
         </CardHeader>
 
         <CardContent className="space-y-6 pt-4">
-          {/* GitHub OAuth Button */}
-          {hasGitHub && (
-            <>
-              <Button
-                variant="outline"
-                className="w-full h-11 gap-3 text-sm font-medium"
-                onClick={handleGitHubSignIn}
-                disabled={loading}
-              >
-                <Github className="h-5 w-5" />
-                Continue with GitHub
-              </Button>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">
-                    or continue with email
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Error Message */}
           {error && (
             <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3">
               <p className="text-sm text-destructive">{error}</p>
             </div>
           )}
 
-          {/* Credentials Form */}
-          <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email
@@ -173,7 +138,6 @@ export function LoginForm({ hasGitHub }: LoginFormProps) {
             </Button>
           </form>
 
-          {/* Demo hint */}
           <div className="rounded-lg bg-muted/50 px-4 py-3">
             <p className="text-xs text-muted-foreground text-center">
               <span className="font-medium text-foreground/80">Demo credentials:</span>{" "}

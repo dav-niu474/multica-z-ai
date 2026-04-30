@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -30,6 +29,7 @@ import { SettingsView } from '@/components/views/settings-view'
 import { RealtimeSetup } from '@/components/realtime/realtime-provider'
 import { ConnectionIndicator } from '@/components/realtime/connection-indicator'
 import { I18nProvider, useTranslation } from '@/lib/i18n'
+import { useAuth } from '@/lib/auth-session'
 import type { Workspace, ViewType } from '@/types'
 
 // ==================== Navigation Items ====================
@@ -70,9 +70,9 @@ const getNavLabel = (key: Exclude<ViewType, 'settings'>, t: any): string => {
 // ==================== Auth Guard ====================
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession()
+  const { user, loading, authenticated } = useAuth()
 
-  if (status === 'loading') {
+  if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center space-y-3">
@@ -83,7 +83,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (status === 'unauthenticated' || !session) {
+  if (!authenticated || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
         <div className="text-center space-y-6 max-w-sm px-4">
@@ -114,10 +114,67 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// ==================== Error Boundary ====================
+
+import React from 'react'
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-screen items-center justify-center p-4">
+          <div className="text-center space-y-4 max-w-lg">
+            <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto">
+              <Layers className="h-8 w-8 text-destructive" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Something went wrong</h2>
+              <p className="text-sm text-muted-foreground break-all">
+                {this.state.error?.message || 'An unexpected error occurred'}
+              </p>
+              {this.state.error?.stack && (
+                <pre className="text-xs text-left bg-muted p-3 rounded-lg overflow-auto max-h-40">
+                  {this.state.error.stack}
+                </pre>
+              )}
+            </div>
+            <Button
+              onClick={() => {
+                this.setState({ hasError: false, error: null })
+                window.location.reload()
+              }}
+            >
+              Reload page
+            </Button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 // ==================== Main App Content ====================
 
 function AppContent() {
-  const { data: session } = useSession()
+  const { user, signOut } = useAuth()
   const { t } = useTranslation()
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -355,13 +412,13 @@ function AppContent() {
               )}
               {!sidebarCollapsed && <span className="ml-2">{t.nav.collapse}</span>}
             </Button>
-            {session?.user && (
+            {user && (
               <Button
                 variant="ghost"
                 className={`w-full ${
                   sidebarCollapsed ? 'justify-center px-0' : 'justify-start'
                 } h-9 text-sm gap-2 text-muted-foreground hover:text-destructive`}
-                onClick={() => signOut({ callbackUrl: '/login' })}
+                onClick={signOut}
                 title={sidebarCollapsed ? 'Sign out' : undefined}
               >
                 <LogOut className="h-4 w-4" />
@@ -471,7 +528,9 @@ export default function Home() {
   return (
     <I18nProvider>
       <AuthGuard>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
       </AuthGuard>
     </I18nProvider>
   )

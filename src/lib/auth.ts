@@ -102,53 +102,9 @@ export const authOptions: NextAuthOptions = {
       return session
     },
 
-    // Auto-link user to workspace on sign in
+    // Allow sign-in without database operations (DB handled by setup/seed)
     async signIn({ user, account, profile }) {
-      if (!user?.email) {
-        return false
-      }
-
-      try {
-        // Find or create user in database
-        let dbUser = await db().user.findUnique({
-          where: { email: user.email },
-        })
-
-        if (!dbUser) {
-          dbUser = await db().user.create({
-            data: {
-              email: user.email,
-              name: user.name || "Unknown User",
-              avatar: user.image || null,
-            },
-          })
-        }
-
-        // Auto-link to first workspace as member if not already a member
-        const workspace = await db().workspace.findFirst()
-        if (workspace) {
-          const existingMember = await db().member.findFirst({
-            where: {
-              userId: dbUser.id,
-              workspaceId: workspace.id,
-            },
-          })
-          if (!existingMember) {
-            await db().member.create({
-              data: {
-                userId: dbUser.id,
-                workspaceId: workspace.id,
-                role: "member",
-              },
-            })
-          }
-        }
-
-        return true
-      } catch (error) {
-        console.error("Error in signIn callback:", error)
-        return false
-      }
+      return true
     },
   },
 
