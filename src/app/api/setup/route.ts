@@ -1,45 +1,40 @@
 import { PrismaClient } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Drop all tables in correct order (child tables first, then parent tables)
-const DROP_TABLES_SQL = [
-  'DROP TABLE IF EXISTS "ActivityLog" CASCADE',
-  'DROP TABLE IF EXISTS "ChatMessage" CASCADE',
-  'DROP TABLE IF EXISTS "AgentTask" CASCADE',
-  'DROP TABLE IF EXISTS "Comment" CASCADE',
-  'DROP TABLE IF EXISTS "Issue" CASCADE',
-  'DROP TABLE IF EXISTS "AgentSkill" CASCADE',
-  'DROP TABLE IF EXISTS "Project" CASCADE',
-  'DROP TABLE IF EXISTS "ChatSession" CASCADE',
-  'DROP TABLE IF EXISTS "Agent" CASCADE',
-  'DROP TABLE IF EXISTS "Skill" CASCADE',
-  'DROP TABLE IF EXISTS "Member" CASCADE',
-  'DROP TABLE IF EXISTS "User" CASCADE',
-  'DROP TABLE IF EXISTS "Workspace" CASCADE',
-]
-
-// SQL statements to create all tables (always CREATE, never IF NOT EXISTS)
+// SQL statements to create all tables (idempotent - uses IF NOT EXISTS)
 const CREATE_TABLES_SQL = [
   'CREATE SCHEMA IF NOT EXISTS "public"',
-  `CREATE TABLE "Workspace" (
+  `CREATE TABLE IF NOT EXISTS "Workspace" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "slug" TEXT NOT NULL, "description" TEXT,
     "context" TEXT, "icon" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Workspace_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX "Workspace_slug_key" ON "Workspace"("slug")',
-  `CREATE TABLE "User" (
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'Workspace_slug_key') THEN
+      CREATE UNIQUE INDEX "Workspace_slug_key" ON "Workspace"("slug");
+    END IF;
+  END $$`,
+  `CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "avatar" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "User_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX "User_email_key" ON "User"("email")',
-  `CREATE TABLE "Member" (
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'User_email_key') THEN
+      CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+    END IF;
+  END $$`,
+  `CREATE TABLE IF NOT EXISTS "Member" (
     "id" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT 'member', "userId" TEXT NOT NULL,
     "workspaceId" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Member_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX "Member_userId_workspaceId_key" ON "Member"("userId", "workspaceId")',
-  `CREATE TABLE "Agent" (
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'Member_userId_workspaceId_key') THEN
+      CREATE UNIQUE INDEX "Member_userId_workspaceId_key" ON "Member"("userId", "workspaceId");
+    END IF;
+  END $$`,
+  `CREATE TABLE IF NOT EXISTS "Agent" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "avatar" TEXT,
     "provider" TEXT NOT NULL DEFAULT 'claude', "instructions" TEXT,
     "status" TEXT NOT NULL DEFAULT 'idle', "maxConcurrent" INTEGER NOT NULL DEFAULT 3,
@@ -48,27 +43,31 @@ const CREATE_TABLES_SQL = [
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Agent_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "Skill" (
+  `CREATE TABLE IF NOT EXISTS "Skill" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "content" TEXT NOT NULL,
     "type" TEXT NOT NULL DEFAULT 'skill', "category" TEXT, "source" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Skill_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "AgentSkill" (
+  `CREATE TABLE IF NOT EXISTS "AgentSkill" (
     "id" TEXT NOT NULL, "agentId" TEXT NOT NULL, "skillId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "AgentSkill_pkey" PRIMARY KEY ("id")
   )`,
-  'CREATE UNIQUE INDEX "AgentSkill_agentId_skillId_key" ON "AgentSkill"("agentId", "skillId")',
-  `CREATE TABLE "Project" (
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'AgentSkill_agentId_skillId_key') THEN
+      CREATE UNIQUE INDEX "AgentSkill_agentId_skillId_key" ON "AgentSkill"("agentId", "skillId");
+    END IF;
+  END $$`,
+  `CREATE TABLE IF NOT EXISTS "Project" (
     "id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "icon" TEXT,
     "status" TEXT NOT NULL DEFAULT 'planned', "priority" TEXT NOT NULL DEFAULT 'none',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "Issue" (
+  `CREATE TABLE IF NOT EXISTS "Issue" (
     "id" TEXT NOT NULL, "title" TEXT NOT NULL, "description" TEXT,
     "status" TEXT NOT NULL DEFAULT 'backlog', "priority" TEXT NOT NULL DEFAULT 'none',
     "order" INTEGER NOT NULL DEFAULT 0, "assigneeType" TEXT, "assigneeId" TEXT,
@@ -78,33 +77,33 @@ const CREATE_TABLES_SQL = [
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "Issue_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "Comment" (
+  `CREATE TABLE IF NOT EXISTS "Comment" (
     "id" TEXT NOT NULL, "content" TEXT NOT NULL,
     "authorType" TEXT NOT NULL DEFAULT 'member', "authorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "issueId" TEXT NOT NULL,
     CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "AgentTask" (
+  `CREATE TABLE IF NOT EXISTS "AgentTask" (
     "id" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'queued', "output" TEXT,
     "tokensUsed" INTEGER NOT NULL DEFAULT 0, "startedAt" TIMESTAMP(3),
     "completedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "agentId" TEXT NOT NULL, "issueId" TEXT,
     "chatSessionId" TEXT, CONSTRAINT "AgentTask_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "ChatSession" (
+  `CREATE TABLE IF NOT EXISTS "ChatSession" (
     "id" TEXT NOT NULL, "title" TEXT, "agentId" TEXT,
     "unreadCount" INTEGER NOT NULL DEFAULT 0, "isArchived" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL, "workspaceId" TEXT NOT NULL,
     CONSTRAINT "ChatSession_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "ChatMessage" (
+  `CREATE TABLE IF NOT EXISTS "ChatMessage" (
     "id" TEXT NOT NULL, "role" TEXT NOT NULL, "content" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "sessionId" TEXT NOT NULL, CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
   )`,
-  `CREATE TABLE "ActivityLog" (
+  `CREATE TABLE IF NOT EXISTS "ActivityLog" (
     "id" TEXT NOT NULL, "action" TEXT NOT NULL, "entityType" TEXT NOT NULL,
     "entityId" TEXT NOT NULL, "actorType" TEXT, "actorId" TEXT, "metadata" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "issueId" TEXT,
@@ -112,24 +111,88 @@ const CREATE_TABLES_SQL = [
   )`,
 ]
 
-// Foreign key constraints (must be created after all tables exist)
+// Foreign key constraints (idempotent - uses DO $$ blocks)
 const ADD_FK_SQL = [
-  'ALTER TABLE "Member" ADD CONSTRAINT "Member_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE',
-  'ALTER TABLE "Member" ADD CONSTRAINT "Member_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE RESTRICT ON UPDATE CASCADE',
-  'ALTER TABLE "Agent" ADD CONSTRAINT "Agent_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "Skill" ADD CONSTRAINT "Skill_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "AgentSkill" ADD CONSTRAINT "AgentSkill_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "AgentSkill" ADD CONSTRAINT "AgentSkill_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "Issue" ADD CONSTRAINT "Issue_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "Issue" ADD CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE',
-  'ALTER TABLE "Comment" ADD CONSTRAINT "Comment_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE',
-  'ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_chatSessionId_fkey" FOREIGN KEY ("chatSessionId") REFERENCES "ChatSession"("id") ON DELETE SET NULL ON UPDATE CASCADE',
-  'ALTER TABLE "Project" ADD CONSTRAINT "Project_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "ChatSession" ADD CONSTRAINT "ChatSession_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "ChatSession"("id") ON DELETE CASCADE ON UPDATE CASCADE',
-  'ALTER TABLE "ActivityLog" ADD CONSTRAINT "ActivityLog_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE',
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Member_userId_fkey') THEN
+      ALTER TABLE "Member" ADD CONSTRAINT "Member_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Member_workspaceId_fkey') THEN
+      ALTER TABLE "Member" ADD CONSTRAINT "Member_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Agent_workspaceId_fkey') THEN
+      ALTER TABLE "Agent" ADD CONSTRAINT "Agent_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Skill_workspaceId_fkey') THEN
+      ALTER TABLE "Skill" ADD CONSTRAINT "Skill_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AgentSkill_agentId_fkey') THEN
+      ALTER TABLE "AgentSkill" ADD CONSTRAINT "AgentSkill_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AgentSkill_skillId_fkey') THEN
+      ALTER TABLE "AgentSkill" ADD CONSTRAINT "AgentSkill_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Issue_workspaceId_fkey') THEN
+      ALTER TABLE "Issue" ADD CONSTRAINT "Issue_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Issue_projectId_fkey') THEN
+      ALTER TABLE "Issue" ADD CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Comment_issueId_fkey') THEN
+      ALTER TABLE "Comment" ADD CONSTRAINT "Comment_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AgentTask_agentId_fkey') THEN
+      ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AgentTask_issueId_fkey') THEN
+      ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AgentTask_chatSessionId_fkey') THEN
+      ALTER TABLE "AgentTask" ADD CONSTRAINT "AgentTask_chatSessionId_fkey" FOREIGN KEY ("chatSessionId") REFERENCES "ChatSession"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Project_workspaceId_fkey') THEN
+      ALTER TABLE "Project" ADD CONSTRAINT "Project_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ChatSession_workspaceId_fkey') THEN
+      ALTER TABLE "ChatSession" ADD CONSTRAINT "ChatSession_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ChatMessage_sessionId_fkey') THEN
+      ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "ChatSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ActivityLog_issueId_fkey') THEN
+      ALTER TABLE "ActivityLog" ADD CONSTRAINT "ActivityLog_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+  END $$`,
 ]
 
 function getDatabaseUrl(): string {
@@ -149,7 +212,7 @@ function getDatabaseUrl(): string {
   return url
 }
 
-// Create a fresh PrismaClient (important after DDL changes)
+// Create a fresh PrismaClient
 function createFreshClient(): PrismaClient {
   return new PrismaClient({
     datasources: { db: { url: getDatabaseUrl() } },
@@ -160,6 +223,12 @@ function createFreshClient(): PrismaClient {
 async function seedDemoData(d: PrismaClient) {
   const now = new Date()
   const day = (n: number) => new Date(now.getTime() - n * 86400000)
+
+  // Only seed if workspace doesn't exist
+  const existingWorkspace = await d.workspace.findFirst()
+  if (existingWorkspace) {
+    return { workspaces: 1, users: 0, agents: 0, skills: 0, issues: 0, projects: 0, chatSessions: 0, seeded: false }
+  }
 
   await d.user.createMany({
     data: [
@@ -261,56 +330,49 @@ async function seedDemoData(d: PrismaClient) {
     ],
   })
 
-  return { workspaces: 1, users: 3, agents: 4, skills: 5, issues: 12, projects: 2, chatSessions: 2 }
+  return { workspaces: 1, users: 3, agents: 4, skills: 5, issues: 12, projects: 2, chatSessions: 2, seeded: true }
 }
 
-// POST /api/setup - Create database tables and seed demo data
-// Always drops and recreates tables to ensure schema is correct
+// POST /api/setup - Ensure database tables exist and seed demo data (idempotent)
 export async function POST(request: NextRequest) {
-  // Create a dedicated client for DDL operations
-  let ddlClient: PrismaClient | null = null
+  let client: PrismaClient | null = null
 
   try {
-    ddlClient = createFreshClient()
+    client = createFreshClient()
 
-    // Step 1: Drop all existing tables (CASCADE handles dependencies)
-    for (const sql of DROP_TABLES_SQL) {
-      await ddlClient.$executeRawUnsafe(sql)
-    }
-
-    // Step 2: Create all tables with correct schema
+    // Step 1: Create all tables with correct schema (IF NOT EXISTS - idempotent)
     for (const sql of CREATE_TABLES_SQL) {
-      await ddlClient.$executeRawUnsafe(sql)
+      await client.$executeRawUnsafe(sql)
     }
 
-    // Step 3: Add foreign key constraints
+    // Step 2: Add foreign key constraints (idempotent)
     for (const fkSql of ADD_FK_SQL) {
-      await ddlClient.$executeRawUnsafe(fkSql)
+      try {
+        await client.$executeRawUnsafe(fkSql)
+      } catch {
+        // FK might already exist, ignore
+      }
     }
 
-    // Disconnect the DDL client (schema may have changed)
-    await ddlClient.$disconnect()
-    ddlClient = null
+    // Disconnect and create fresh client for seeding
+    await client.$disconnect()
+    client = null
 
-    // Step 4: Create a fresh client for seeding (ensures clean Prisma metadata)
+    // Step 3: Seed demo data (only if workspace doesn't exist)
     const seedClient = createFreshClient()
-
-    // Step 5: Seed demo data
     const stats = await seedDemoData(seedClient)
-
     await seedClient.$disconnect()
 
     return NextResponse.json({
       success: true,
-      message: 'Database setup and seed completed',
+      message: 'Database setup completed',
       stats,
     })
   } catch (error) {
     console.error('Error setting up database:', error)
 
-    // Make sure client is disconnected on error
-    if (ddlClient) {
-      try { await ddlClient.$disconnect() } catch { /* ignore */ }
+    if (client) {
+      try { await client.$disconnect() } catch { /* ignore */ }
     }
 
     return NextResponse.json(

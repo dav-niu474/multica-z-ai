@@ -53,25 +53,35 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // Find or create user in database
-        let user = await db().user.findUnique({
-          where: { email: account.email },
-        })
-
-        if (!user) {
-          user = await db().user.create({
-            data: {
-              email: account.email,
-              name: account.name,
-            },
+        // Try to find or create user in database, but don't fail if DB isn't ready
+        try {
+          let user = await db().user.findUnique({
+            where: { email: account.email },
           })
-        }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.avatar,
+          if (!user) {
+            user = await db().user.create({
+              data: {
+                email: account.email,
+                name: account.name,
+              },
+            })
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.avatar,
+          }
+        } catch (dbError) {
+          // DB might not be ready yet (tables not created). Return user from memory.
+          console.warn("Auth DB lookup failed (tables may not exist yet), using in-memory credentials:", dbError)
+          return {
+            id: `demo-${account.email}`,
+            email: account.email,
+            name: account.name,
+          }
         }
       },
     }),
@@ -102,9 +112,54 @@ export const authOptions: NextAuthOptions = {
       return session
     },
 
-    // Allow sign-in without database operations (DB handled by setup/seed)
+    // Auto-link user to workspace on sign in (non-blocking)
     async signIn({ user, account, profile }) {
-      return true
+      if (!user?.email) {
+        return false
+      }
+
+      try {
+        // Find or create user in database
+        let dbUser = await db().user.findUnique({
+          where: { email: user.email },
+        })
+
+        if (!dbUser) {
+          dbUser = await db().user.create({
+            data: {
+              email: user.email,
+              name: user.name || "Unknown User",
+              avatar: user.image || null,
+            },
+          })
+        }
+
+        // Auto-link to first workspace as member if not already a member
+        const workspace = await db().workspace.findFirst()
+        if (workspace) {
+          const existingMember = await db().member.findFirst({
+            where: {
+              userId: dbUser.id,
+              workspaceId: workspace.id,
+            },
+          })
+          if (!existingMember) {
+            await db().member.create({
+              data: {
+                userId: dbUser.id,
+                workspaceId: workspace.id,
+                role: "member",
+              },
+            })
+          }
+        }
+
+        return true
+      } catch (error) {
+        // Don't block sign-in if DB operations fail (tables may not exist yet)
+        console.warn("signIn DB callback failed (tables may not exist yet), allowing sign-in:", error)
+        return true
+      }
     },
   },
 

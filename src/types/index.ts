@@ -199,6 +199,41 @@ export interface ActivityLog {
 }
 
 // ============ DASHBOARD ============
+export interface DashboardData {
+  workspace: {
+    id: string
+    name: string
+    slug: string
+    _count: {
+      members: number
+      agents: number
+      issues: number
+      projects: number
+      chatSessions: number
+      skills: number
+    }
+  } | null
+  overview: {
+    totalIssues: number
+    issueStatusCounts: Record<string, number>
+    issuePriorityCounts: Record<string, number>
+    agentStatusCounts: Record<string, number>
+    taskStatusCounts: Record<string, number>
+  }
+  agents: Agent[]
+  projects: Array<{
+    id: string
+    name: string
+    icon: string | null
+    status: string
+    totalIssues: number
+    doneIssues: number
+    progress: number
+  }>
+  recentActivity: (ActivityLog & { issue?: { id: string; title: string; workspaceId: string } | null })[]
+  activeTasks: Array<AgentTask & { agent?: { id: string; name: string; avatar: string | null; provider: string } | null }>
+}
+
 export interface DashboardStats {
   issueCounts: Record<IssueStatus, number>
   agentStatusCounts: Record<AgentStatus, number>
