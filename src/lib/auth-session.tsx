@@ -20,7 +20,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
-  loading: true,
+  loading: false,
   authenticated: false,
   refresh: async () => {},
   signOut: () => {},
@@ -32,12 +32,15 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  // Start with loading=false so AuthGuard shows the sign-in prompt immediately
+  // instead of a loading spinner during SSR. Auth check happens via useEffect.
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   // Fetch session from server on mount and route change
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
 
     async function fetchSession() {
       try {
