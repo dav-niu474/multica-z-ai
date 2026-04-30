@@ -111,14 +111,25 @@ const getNavLabel = (key: Exclude<ViewType, 'settings'>, t: any): string => {
 // ==================== Auth Guard ====================
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, authenticated } = useAuth()
+  const { user, authenticated, loading } = useAuth()
 
-  // IMPORTANT: No loading spinner here!
-  // During SSR, user is null → show sign-in prompt immediately.
-  // After client hydration, useEffect in AuthProvider fetches /api/me.
-  // If authenticated, the UI updates to show the app.
-  // This prevents users from being stuck on "Loading..." when JS is slow.
+  // During auth check, show a brief spinner (client-side only)
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Layers className="h-8 w-8 text-primary animate-pulse" />
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">Checking session...</p>
+        </div>
+      </div>
+    )
+  }
 
+  // Not authenticated → show sign-in prompt
   if (!authenticated || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
