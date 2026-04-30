@@ -146,3 +146,36 @@ Stage Summary:
 - Middleware deleted permanently — auth handled client-side
 - Login flow fully functional: visit /login → enter credentials → redirected to / → authenticated
 - All API routes accessible without middleware interference
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix page stuck on "Loading..." — SSR renders loading state requiring 1.5MB JS to hydrate
+
+Work Log:
+- User reported: page shows only "Loading..." forever, never renders content
+- Diagnosed root cause:
+  1. Main page JS chunk was 1.5MB (all view components + socket.io-client)
+  2. Next.js SSG pre-rendered the page with AuthGuard's "Loading..." state
+  3. Client JS hydration required to escape the loading state
+  4. If 1.5MB chunk slow to download/parse → user stuck on SSR HTML forever
+- Fix 1: AuthGuard no longer shows loading spinner — shows "Sign in to continue" directly
+  - During SSR, user=null → renders sign-in prompt (useful HTML)
+  - Client JS updates to app after auth check (if authenticated)
+  - No more stuck "Loading..." regardless of JS load speed
+- Fix 2: AuthProvider starts with loading=false instead of loading=true
+  - Prevents AuthGuard from showing loading state during initial render
+- Fix 3: All 8 view components code-split with next/dynamic
+  - DashboardView, AgentsView, IssuesView, ChatView, SkillsView, ProjectsView, PatternsView, SettingsView
+  - Each lazy-loaded with skeleton placeholder
+  - Reduces initial bundle dramatically
+- Fix 4: RealtimeSetup loaded with ssr:false (no socket.io-client in SSR)
+- Verified: SSR HTML contains "Sign in to continue" (not "Loading...")
+- Verified: No "Loading" text in pre-rendered HTML at all
+- All API endpoints still working (200 OK)
+
+Stage Summary:
+- SSR renders useful sign-in prompt instead of stuck "Loading..."
+- Initial JS bundle significantly reduced via code-splitting
+- Page is interactive immediately even before heavy chunks load
+- socket.io-client excluded from SSR (loaded client-side only)
