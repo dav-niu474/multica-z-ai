@@ -179,3 +179,29 @@ Stage Summary:
 - Initial JS bundle significantly reduced via code-splitting
 - Page is interactive immediately even before heavy chunks load
 - socket.io-client excluded from SSR (loaded client-side only)
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Fix login redirect loop - page stuck cycling between login and home
+
+Work Log:
+- User reported: login succeeds but redirects back to login page (infinite loop)
+- Diagnosed root cause: TWO auth systems existed but the wrong one was mounted
+  - `src/lib/auth-session.tsx`: Custom AuthProvider that fetches /api/me (CORRECT, used by AuthGuard)
+  - `src/components/auth/auth-provider.tsx`: NextAuth SessionProvider wrapper (WRONG, was mounted in layout)
+  - `layout.tsx` imported AuthProvider from components/auth/auth-provider.tsx (NextAuth wrapper)
+  - `page.tsx` AuthGuard used useAuth() from lib/auth-session.tsx (custom context)
+  - The custom AuthProvider was NEVER mounted → useContext always returned default {user:null, authenticated:false}
+  - AuthGuard always showed "Sign in to continue" regardless of login state
+- Fix 1: Changed layout.tsx import to use AuthProvider from @/lib/auth-session
+- Fix 2: Updated AuthGuard to show brief spinner during auth check (loading state)
+- Verified full flow via curl: signin → cookie → /api/me returns user ✓
+- Deployed to production via vercel --prod
+
+Stage Summary:
+- Root cause: Wrong AuthProvider was mounted (NextAuth SessionProvider instead of custom AuthProvider)
+- The custom AuthProvider that calls /api/me to verify session was never in the component tree
+- Fixed by using the correct AuthProvider import in layout.tsx
+- Login flow now works: /login → signin → cookie set → redirect / → AuthGuard checks /api/me → authenticated → show app
+- Production URL: https://multica-z-ai.vercel.app
