@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, Component, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -159,58 +159,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>
-}
-
-// ==================== Error Boundary ====================
-
-import React from 'react'
-
-interface ErrorBoundaryState {
-  hasError: boolean
-  error: Error | null
-}
-
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  ErrorBoundaryState
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex h-screen items-center justify-center p-4">
-          <div className="text-center space-y-4 max-w-lg">
-            <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto">
-              <Layers className="h-8 w-8 text-destructive" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold">Something went wrong</h2>
-              <p className="text-sm text-muted-foreground break-all">
-                {this.state.error?.message || 'An unexpected error occurred'}
-              </p>
-            </div>
-            <Button
-              onClick={() => {
-                this.setState({ hasError: false, error: null })
-                window.location.reload()
-              }}
-            >
-              Reload page
-            </Button>
-          </div>
-        </div>
-      )
-    }
-    return this.props.children
-  }
 }
 
 // ==================== Main App Content ====================
@@ -570,9 +518,7 @@ export default function Home() {
   return (
     <I18nProvider>
       <AuthGuard>
-        <ErrorBoundary>
-          <AppContent />
-        </ErrorBoundary>
+        <AppContent />
       </AuthGuard>
     </I18nProvider>
   )
