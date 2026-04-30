@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, Component, type ReactNode } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -75,7 +76,7 @@ function ViewSkeleton() {
 
 // ==================== Navigation Items ====================
 
-const NAV_ICONS: Record<Exclude<ViewType, 'settings'>, React.ReactNode> = {
+const NAV_ICONS: Record<Exclude<ViewType, 'settings'>, ReactNode> = {
   dashboard: <LayoutDashboard className="h-4 w-4" />,
   agents: <Bot className="h-4 w-4" />,
   issues: <Kanban className="h-4 w-4" />,
@@ -110,7 +111,7 @@ const getNavLabel = (key: Exclude<ViewType, 'settings'>, t: any): string => {
 
 // ==================== Auth Guard ====================
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function AuthGuard({ children }: { children: ReactNode }) {
   const { user, authenticated, loading } = useAuth()
 
   // During auth check, show a brief spinner (client-side only)
