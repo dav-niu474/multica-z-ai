@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -30,15 +31,52 @@ import {
   Menu,
   LogIn,
   LogOut,
-  Plus,
   type LucideIcon,
 } from 'lucide-react'
 import { ConnectionIndicator } from '@/components/realtime/connection-indicator'
 import { I18nProvider, useTranslation } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-session'
 import { useModalStore } from '@/store/modal-store'
+import { WorkspaceProvider, useWorkspaceContext } from '@/lib/workspace-context'
 import type { Workspace, ViewType } from '@/types'
 import { cn } from '@/lib/utils'
+
+const OnboardingFlow = dynamic(() => import('@/components/onboarding/onboarding-flow'), { ssr: false })
+
+// ==================== Onboarding Guard ====================
+
+const ONBOARDING_KEY = 'multica_onboarding_done'
+
+function getOnboardingSnapshot(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(ONBOARDING_KEY)
+}
+
+function getOnboardingServerSnapshot(): string | null {
+  return null
+}
+
+function subscribeOnboarding(callback: () => void): () => void {
+  window.addEventListener('storage', callback)
+  return () => window.removeEventListener('storage', callback)
+}
+
+function OnboardingGuard({ children }: { children: ReactNode }) {
+  const onboarded = useSyncExternalStore(subscribeOnboarding, getOnboardingSnapshot, getOnboardingServerSnapshot)
+
+  const shouldShowOnboarding = onboarded === '' || onboarded === null
+
+  const handleComplete = useCallback(() => {
+    localStorage.setItem(ONBOARDING_KEY, 'true')
+    window.dispatchEvent(new StorageEvent('storage', { key: ONBOARDING_KEY }))
+  }, [])
+
+  if (shouldShowOnboarding) {
+    return <OnboardingFlow onComplete={handleComplete} />
+  }
+
+  return <>{children}</>
+}
 
 // ==================== Code-split heavy view components ====================
 
@@ -54,13 +92,13 @@ const MyIssuesView = dynamic(() => import('@/components/views/my-issues-view'), 
 const AgentsView = dynamic(() => import('@/components/views/agents-view'), {
   loading: () => <ViewSkeleton />,
 })
-const ProjectsView = dynamic(() => import('@/components/views/projects-view'), {
+const ProjectsView = dynamic(() => import('@/components/views/projects-view').then(m => ({ default: m.ProjectsView })), {
   loading: () => <ViewSkeleton />,
 })
 const ChatView = dynamic(() => import('@/components/views/chat-view'), {
   loading: () => <ViewSkeleton />,
 })
-const SkillsView = dynamic(() => import('@/components/views/skills-view'), {
+const SkillsView = dynamic(() => import('@/components/views/skills-view').then(m => ({ default: m.SkillsView })), {
   loading: () => <ViewSkeleton />,
 })
 const InboxView = dynamic(() => import('@/components/views/inbox-view'), {
@@ -78,7 +116,7 @@ const MembersView = dynamic(() => import('@/components/views/members-view'), {
 const SettingsView = dynamic(() => import('@/components/views/settings-view'), {
   loading: () => <ViewSkeleton />,
 })
-const PatternsView = dynamic(() => import('@/components/views/patterns-view'), {
+const PatternsView = dynamic(() => import('@/components/views/patterns-view').then(m => ({ default: m.PatternsView })), {
   loading: () => <ViewSkeleton />,
 })
 
@@ -501,47 +539,24 @@ function AppContent() {
   const { user, signOut } = useAuth()
   const { t } = useTranslation()
   const { open: openModal } = useModalStore()
+  const { workspace, workspaceId, workspaceSlug } = useWorkspaceContext()
+  const router = useRouter()
 
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
-  const [workspaceId, setWorkspaceId] = useState<string>('')
-  const [activeView, setActiveView] = useState<ViewType>('dashboard')
+  const [activeView, setActiveView] = useState<ViewType>('issues')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [inboxBadge, setInboxBadge] = useState(0)
 
-  // Initialize workspace
+  // Try to redirect to workspace URL (for non-sandbox environments)
+  const redirectAttemptedRef = useRef(false)
   useEffect(() => {
-    async function init() {
-      try {
-        const setupRes = await fetch('/api/setup', { method: 'POST' })
-        if (!setupRes.ok) {
-          setSetupError('Database setup failed. Please try again.')
-          setLoading(false)
-          return
-        }
-
-        const wsRes = await fetch('/api/workspaces')
-        if (!wsRes.ok) {
-          setSetupError('Failed to load workspace data.')
-          setLoading(false)
-          return
-        }
-
-        const data: Workspace[] = await wsRes.json()
-        if (data.length > 0) {
-          setWorkspace(data[0])
-          setWorkspaceId(data[0].id)
-        }
-      } catch {
-        setSetupError('Network error. Please check your connection.')
-      } finally {
-        setLoading(false)
-      }
+    if (workspaceSlug && !redirectAttemptedRef.current) {
+      redirectAttemptedRef.current = true
+      // Use replace to avoid breaking back button
+      router.replace(`/${workspaceSlug}/issues`)
     }
-    init()
-  }, [])
+  }, [workspaceSlug, router])
 
   // Fetch inbox badge count
   useEffect(() => {
@@ -563,32 +578,6 @@ function AppContent() {
     const interval = setInterval(fetchBadge, 30000)
     return () => clearInterval(interval)
   }, [workspaceId])
-
-  const handleRetry = useCallback(async () => {
-    setSetupError(null)
-    setLoading(true)
-    try {
-      const setupRes = await fetch('/api/setup', { method: 'POST' })
-      if (!setupRes.ok) {
-        setSetupError('Database setup failed. Please try again.')
-        setLoading(false)
-        return
-      }
-      const wsRes = await fetch('/api/workspaces')
-      if (wsRes.ok) {
-        const data: Workspace[] = await wsRes.json()
-        if (data.length > 0) {
-          setWorkspace(data[0])
-          setWorkspaceId(data[0].id)
-        }
-        setSetupError(null)
-      }
-    } catch {
-      setSetupError('Network error. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   const handleNav = useCallback((view: ViewType) => {
     setActiveView(view)
@@ -623,9 +612,6 @@ function AppContent() {
           <div className="text-center space-y-3">
             <Layers className="h-12 w-12 text-destructive/20 mx-auto" />
             <p className="text-sm text-destructive">{setupError}</p>
-            <Button variant="outline" size="sm" onClick={handleRetry}>
-              {t.common.retry}
-            </Button>
           </div>
         </div>
       )
@@ -637,9 +623,6 @@ function AppContent() {
           <div className="text-center space-y-3">
             <Layers className="h-12 w-12 text-muted-foreground/20 mx-auto" />
             <p className="text-sm text-muted-foreground">{t.workspace.noWorkspaceFound}</p>
-            <Button variant="outline" size="sm" onClick={handleRetry}>
-              {t.common.retry}
-            </Button>
           </div>
         </div>
       )
@@ -649,9 +632,9 @@ function AppContent() {
       case 'dashboard':
         return <DashboardView />
       case 'inbox':
-        return <InboxView workspaceId={workspaceId} />
+        return <InboxView />
       case 'my-issues':
-        return <MyIssuesView workspaceId={workspaceId} />
+        return <MyIssuesView />
       case 'issues':
         return <IssuesView workspaceId={workspaceId} />
       case 'agents':
@@ -663,11 +646,11 @@ function AppContent() {
       case 'skills':
         return <SkillsView workspaceId={workspaceId} />
       case 'autopilots':
-        return <AutopilotsView workspaceId={workspaceId} />
+        return <AutopilotsView />
       case 'runtimes':
-        return <RuntimesView workspaceId={workspaceId} />
+        return <RuntimesView />
       case 'members':
-        return <MembersView workspaceId={workspaceId} />
+        return <MembersView />
       case 'settings':
         return <SettingsView />
       case 'patterns':
@@ -675,25 +658,7 @@ function AppContent() {
       default:
         return <DashboardView />
     }
-  }, [activeView, workspaceId, t, setupError, handleRetry])
-
-  if (loading) {
-    return (
-      <div className="flex h-screen">
-        <div className="w-[60px] border-r flex flex-col items-center py-4 gap-3">
-          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <Skeleton key={i} className="h-9 w-9 rounded-md" />
-          ))}
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-3">
-            <Layers className="h-8 w-8 text-muted-foreground/30 mx-auto animate-pulse" />
-            <p className="text-sm text-muted-foreground">{t.workspace.loadingWorkspace}</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  }, [activeView, workspaceId, t, setupError])
 
   return (
     <RealtimeSetup workspaceId={workspaceId}>
@@ -764,7 +729,11 @@ export default function Home() {
   return (
     <I18nProvider>
       <AuthGuard>
-        <AppContent />
+        <OnboardingGuard>
+          <WorkspaceProvider>
+            <AppContent />
+          </WorkspaceProvider>
+        </OnboardingGuard>
       </AuthGuard>
     </I18nProvider>
   )

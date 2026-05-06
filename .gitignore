@@ -55,6 +55,7 @@ server.log
 skills/
 *.db
 download/
+uploads/
 .env
 .env.local
 .env*.local

@@ -179,7 +179,7 @@ model AgentRuntime {
   deviceInfo    Json?
   os            String?
   cliVersion    String?
-  daemonUuid    String?   @unique
+  daemonUuid    String?
   lastHeartbeat DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

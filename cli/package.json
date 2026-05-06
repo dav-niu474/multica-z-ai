@@ -1,0 +1,15 @@
+{
+  "name": "multica-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for AgentHub/Multica multi-agent collaboration platform",
+  "bin": {
+    "multica": "./index.js"
+  },
+  "scripts": {
+    "dev": "bun run index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {},
+  "keywords": ["cli", "agenthub", "multica", "agents", "collaboration"],
+  "license": "MIT"
+}

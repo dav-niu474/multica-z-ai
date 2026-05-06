@@ -21,9 +21,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Calendar, MessageSquare, Send, Loader2, X, Bot, User } from 'lucide-react'
+import { Calendar, MessageSquare, Send, Loader2, Bot, User } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import type { Issue, IssueStatus, IssuePriority, Agent, Comment } from '@/types'
+import type { Issue, IssueStatus, IssuePriority, Agent, Comment, Attachment } from '@/types'
+import { FileUploadButton } from '@/components/upload/file-upload-button'
+import { FileDropZone } from '@/components/upload/file-drop-zone'
+import { FilePreview } from '@/components/upload/file-preview'
+import { ImageLightbox } from '@/components/upload/image-lightbox'
+import { CommentAttachments } from '@/components/issues/comment-attachments'
+import { useFileUpload, type UploadResult } from '@/hooks/use-file-upload'
+import { useWorkspace } from '@/hooks/use-workspace'
 
 interface IssueDetailPanelProps {
   issueId: string | null
@@ -50,6 +57,13 @@ const PRIORITY_CONFIG: Record<IssuePriority, { label: string; color: string }> =
   urgent: { label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 }
 
+interface PendingUpload {
+  file: File
+  result: UploadResult | null
+  uploading: boolean
+  error: string | null
+}
+
 export default function IssueDetailPanel({
   issueId,
   open,
@@ -58,10 +72,20 @@ export default function IssueDetailPanel({
   onIssueUpdated,
 }: IssueDetailPanelProps) {
   const [issue, setIssue] = useState<Issue | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
+  const [lightboxState, setLightboxState] = useState<{ open: boolean; url: string | null; name?: string }>({
+    open: false,
+    url: null,
+  })
+  const { workspace } = useWorkspace()
+  const { upload } = useFileUpload()
+
+  const workspaceId = workspace?.id || 'default'
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) return
@@ -79,11 +103,25 @@ export default function IssueDetailPanel({
     }
   }, [issueId])
 
+  const fetchComments = useCallback(async () => {
+    if (!issueId) return
+    try {
+      const res = await fetch(`/api/issues/${issueId}/comments`)
+      if (res.ok) {
+        const data = await res.json()
+        setComments(data)
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err)
+    }
+  }, [issueId])
+
   useEffect(() => {
     if (open && issueId) {
       fetchIssue()
+      fetchComments()
     }
-  }, [open, issueId, fetchIssue])
+  }, [open, issueId, fetchIssue, fetchComments])
 
   const handleStatusChange = async (newStatus: string) => {
     if (!issueId || updating) return
@@ -127,27 +165,76 @@ export default function IssueDetailPanel({
     }
   }
 
+  // Handle file selection for upload
+  const handleFileSelect = useCallback(async (file: File) => {
+    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const pending: PendingUpload = {
+      file,
+      result: null,
+      uploading: true,
+      error: null,
+    }
+
+    setPendingUploads((prev) => [...prev, pending])
+
+    const result = await upload(file, workspaceId)
+
+    setPendingUploads((prev) =>
+      prev.map((p) => {
+        // Match by file reference
+        if (p.file === file && p.uploading) {
+          return {
+            ...p,
+            uploading: false,
+            result,
+            error: result ? null : 'Upload failed',
+          }
+        }
+        return p
+      })
+    )
+  }, [upload, workspaceId])
+
+  // Handle drop zone files
+  const handleDropFiles = useCallback((files: FileList) => {
+    for (let i = 0; i < files.length; i++) {
+      handleFileSelect(files[i])
+    }
+  }, [handleFileSelect])
+
+  // Remove a pending upload
+  const removePendingUpload = useCallback((index: number) => {
+    setPendingUploads((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
   const handleAddComment = async () => {
-    if (!issueId || !newComment.trim()) return
+    if (!issueId) return
+    if (!newComment.trim() && pendingUploads.length === 0) return
+
+    // Check if any uploads are still in progress
+    const hasUploading = pendingUploads.some((p) => p.uploading)
+    if (hasUploading) return
+
     setSubmittingComment(true)
     try {
-      const res = await fetch(`/api/issues/${issueId}`, {
-        method: 'PUT',
+      // Gather successfully uploaded attachment metadata
+      const attachments = pendingUploads
+        .filter((p) => p.result)
+        .map((p) => p.result!)
+
+      const res = await fetch(`/api/issues/${issueId}/comments`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          content: newComment.trim(),
+          attachments,
+        }),
       })
-      // Comments are added via a separate approach — we post to the issue's activity
-      // For now we'll refetch after simulating
-      // Actually the API doesn't have a dedicated POST /comments endpoint,
-      // so we'll create a comment by updating and refetching
-      // Let's use the activity log as a workaround — or we can add inline
-      // For this implementation, let's just add it directly to the DB via the issues API
-      // Since we don't have a dedicated comments API, let's just refresh
+
       if (res.ok) {
         setNewComment('')
-        // Re-fetch to get updated data
-        // In a real app, we'd POST to /api/issues/[id]/comments
-        fetchIssue()
+        setPendingUploads([])
+        fetchComments()
       }
     } catch (err) {
       console.error('Error adding comment:', err)
@@ -163,6 +250,9 @@ export default function IssueDetailPanel({
     }
     return { name: issue.assigneeId, avatar: null }
   }
+
+  const canSubmit = (newComment.trim() && !submittingComment) || 
+    (!submittingComment && pendingUploads.length > 0 && !pendingUploads.some((p) => p.uploading))
 
   if (loading) {
     return (
@@ -329,79 +419,139 @@ export default function IssueDetailPanel({
               <h3 className="text-sm font-medium flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Comments
-                {issue.comments && issue.comments.length > 0 && (
+                {comments.length > 0 && (
                   <Badge variant="secondary" className="text-xs">
-                    {issue.comments.length}
+                    {comments.length}
                   </Badge>
                 )}
               </h3>
 
               {/* Existing comments */}
-              {issue.comments && issue.comments.length > 0 && (
+              {comments.length > 0 && (
                 <div className="space-y-3">
-                  {issue.comments.map((comment: Comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                        <AvatarFallback className="text-[10px] bg-muted">
-                          {comment.authorType === 'agent' ? (
-                            <Bot className="h-3.5 w-3.5" />
-                          ) : (
-                            <User className="h-3.5 w-3.5" />
+                  {comments.map((comment: Comment) => {
+                    // Parse attachments from JSON
+                    const attachments: Attachment[] = Array.isArray(comment.attachments)
+                      ? comment.attachments
+                      : typeof comment.attachments === 'string'
+                        ? JSON.parse(comment.attachments || '[]')
+                        : []
+
+                    return (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar className="h-7 w-7 shrink-0 mt-0.5">
+                          <AvatarFallback className="text-[10px] bg-muted">
+                            {comment.authorType === 'agent' ? (
+                              <Bot className="h-3.5 w-3.5" />
+                            ) : (
+                              <User className="h-3.5 w-3.5" />
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium">
+                              {comment.authorType === 'agent' ? 'Agent' : comment.authorName || 'Member'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                          {comment.content && (
+                            <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">
+                              {comment.content}
+                            </p>
                           )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium">
-                            {comment.authorType === 'agent' ? 'Agent' : 'Member'}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
-                          </span>
+                          <CommentAttachments
+                            attachments={attachments}
+                            onImageClick={(att) => setLightboxState({
+                              open: true,
+                              url: att.url,
+                              name: att.name,
+                            })}
+                          />
                         </div>
-                        <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">
-                          {comment.content}
-                        </p>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
-              {/* Add comment */}
-              <div className="flex gap-2 items-end">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={2}
-                  className="flex-1 resize-none text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      handleAddComment()
-                    }
-                  }}
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim() || submittingComment}
-                  className="shrink-0 h-9 w-9"
-                >
-                  {submittingComment ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
+              {/* Add comment with drag-and-drop */}
+              <FileDropZone onFiles={handleDropFiles}>
+                <div className="space-y-2">
+                  {/* Pending file previews */}
+                  {pendingUploads.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {pendingUploads.map((pending, index) =>
+                        pending.result ? (
+                          <FilePreview
+                            key={pending.result.id}
+                            file={pending.result}
+                            compact
+                            onRemove={() => removePendingUpload(index)}
+                          />
+                        ) : (
+                          <FilePreview
+                            key={`pending-${index}`}
+                            file={pending.file as File & { _uploadResult?: undefined }}
+                            uploading={pending.uploading}
+                            progress={0}
+                            onRemove={() => removePendingUpload(index)}
+                            compact
+                          />
+                        )
+                      )}
+                    </div>
                   )}
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                Press Ctrl+Enter to send
-              </p>
+
+                  <div className="flex gap-2 items-end">
+                    <Textarea
+                      placeholder="Add a comment... (drag & drop or paste files)"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={2}
+                      className="flex-1 resize-none text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          handleAddComment()
+                        }
+                      }}
+                    />
+                    <FileUploadButton
+                      onSelect={handleFileSelect}
+                      tooltip="Attach file"
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleAddComment}
+                      disabled={!canSubmit}
+                      className="shrink-0 h-9 w-9"
+                    >
+                      {submittingComment ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Press Ctrl+Enter to send · Attach files with the clip button or drag & drop
+                  </p>
+                </div>
+              </FileDropZone>
             </div>
           </div>
         </ScrollArea>
+
+        {/* Image Lightbox */}
+        <ImageLightbox
+          open={lightboxState.open}
+          onOpenChange={(open) => setLightboxState({ open, url: null, name: undefined })}
+          imageUrl={lightboxState.url}
+          imageName={lightboxState.name}
+        />
       </SheetContent>
     </Sheet>
   )

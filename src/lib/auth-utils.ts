@@ -21,38 +21,51 @@ async function verifyToken(token: string): Promise<Record<string, unknown> | nul
 }
 
 /**
- * Get the current authenticated user ID from JWT cookie.
+ * Get the current authenticated user ID from JWT cookie or Authorization header.
  * Uses JWT from cookie directly (skip NextAuth to avoid JWE errors).
+ * Also supports Bearer token via Authorization header (for CLI).
  * Returns null if not authenticated.
  */
-export async function getCurrentUserId(): Promise<string | null> {
-  // Try JWT from cookie directly (skip NextAuth to avoid JWE errors)
-  try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("next-auth.session-token")?.value
-      || cookieStore.get("__Secure-next-auth.session-token")?.value
+export async function getCurrentUserId(request?: NextRequest): Promise<string | null> {
+  let token: string | undefined
 
-    if (token) {
-      const payload = await verifyToken(token)
-      if (!payload) return null
-
-      // sub might be an email (from signin) or a UUID (from verify-code)
-      const sub = payload.sub as string
-      if (!sub) return null
-
-      // If sub looks like an email, find the user by email
-      if (sub.includes('@')) {
-        const user = await db().user.findUnique({
-          where: { email: sub },
-          select: { id: true },
-        })
-        return user?.id || null
-      }
-
-      return sub
+  // Check Authorization header first (for CLI / API usage)
+  if (request) {
+    const authHeader = request.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7)
     }
-  } catch {
-    // JWT verification failed
+  }
+
+  // Fall back to cookie (for browser usage)
+  if (!token) {
+    try {
+      const cookieStore = await cookies()
+      token = cookieStore.get("next-auth.session-token")?.value
+        || cookieStore.get("__Secure-next-auth.session-token")?.value
+    } catch {
+      // cookies() not available in non-request context
+    }
+  }
+
+  if (token) {
+    const payload = await verifyToken(token)
+    if (!payload) return null
+
+    // sub might be an email (from signin) or a UUID (from verify-code)
+    const sub = payload.sub as string
+    if (!sub) return null
+
+    // If sub looks like an email, find the user by email
+    if (sub.includes('@')) {
+      const user = await db().user.findUnique({
+        where: { email: sub },
+        select: { id: true },
+      })
+      return user?.id || null
+    }
+
+    return sub
   }
 
   return null
@@ -88,8 +101,8 @@ export async function getAuthSession() {
  * Require authentication. Throws an error with status 401 if not authenticated.
  * Returns the user ID if authenticated.
  */
-export async function requireAuth(): Promise<string> {
-  const userId = await getCurrentUserId()
+export async function requireAuth(request?: NextRequest): Promise<string> {
+  const userId = await getCurrentUserId(request)
 
   if (!userId) {
     throw Object.assign(new Error("Authentication required"), { status: 401 })
@@ -163,7 +176,7 @@ export async function resolveWorkspaceId(request: NextRequest): Promise<string |
   }
 
   // Fall back to user's first workspace membership
-  const userId = await getCurrentUserId()
+  const userId = await getCurrentUserId(request)
   if (!userId) return null
 
   const member = await db().member.findFirst({

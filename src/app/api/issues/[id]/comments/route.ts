@@ -35,10 +35,10 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { content, authorType, authorId, parentId } = body
+    const { content, authorType, authorId, parentId, attachments } = body
 
-    if (!content) {
-      return NextResponse.json({ error: 'Content is required' }, { status: 400 })
+    if (!content && (!attachments || attachments.length === 0)) {
+      return NextResponse.json({ error: 'Content or attachments are required' }, { status: 400 })
     }
 
     const issue = await db().issue.findUnique({ where: { id } })
@@ -73,9 +73,24 @@ export async function POST(
       }
     }
 
+    // Validate and sanitize attachments
+    let sanitizedAttachments: unknown[] = []
+    if (attachments && Array.isArray(attachments)) {
+      sanitizedAttachments = attachments
+        .filter((a: unknown) => a !== null && typeof a === 'object')
+        .map((a: Record<string, unknown>) => ({
+          id: typeof a.id === 'string' ? a.id : '',
+          name: typeof a.name === 'string' ? a.name : 'unknown',
+          url: typeof a.url === 'string' ? a.url : '',
+          size: typeof a.size === 'number' ? a.size : 0,
+          mimeType: typeof a.mimeType === 'string' ? a.mimeType : 'application/octet-stream',
+          createdAt: typeof a.createdAt === 'string' ? a.createdAt : new Date().toISOString(),
+        }))
+    }
+
     const comment = await db().comment.create({
       data: {
-        content,
+        content: content || '',
         type: 'comment',
         authorType: resolvedAuthorType,
         authorId: resolvedAuthorId,
@@ -84,6 +99,7 @@ export async function POST(
         parentId: parentId || null,
         issueId: id,
         workspaceId: issue.workspaceId,
+        attachments: JSON.stringify(sanitizedAttachments),
       },
     })
 

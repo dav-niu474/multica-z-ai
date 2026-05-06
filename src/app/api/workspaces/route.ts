@@ -3,18 +3,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserId } from '@/lib/auth-utils'
 
 // GET /api/workspaces - List workspaces where current user is a member
-export async function GET() {
+// GET /api/workspaces?slug=xxx - Filter by slug
+export async function GET(request: NextRequest) {
   try {
-    const userId = await getCurrentUserId()
+    const userId = await getCurrentUserId(request)
+    const { searchParams } = new URL(request.url)
+    const slug = searchParams.get('slug')
+
+    const where = userId
+      ? {
+          members: {
+            some: { userId },
+          },
+          ...(slug ? { slug } : {}),
+        }
+      : slug
+        ? { slug }
+        : undefined
 
     const workspaces = await db().workspace.findMany({
-      where: userId
-        ? {
-            members: {
-              some: { userId },
-            },
-          }
-        : undefined,
+      where,
       include: {
         _count: {
           select: {

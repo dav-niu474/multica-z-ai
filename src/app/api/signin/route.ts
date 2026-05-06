@@ -37,9 +37,10 @@ export async function POST(request: NextRequest) {
       .setProtectedHeader({ alg: 'HS256' })
       .sign(new TextEncoder().encode(JWT_SECRET))
 
-    // Create response with session cookie
+    // Create response with session cookie and token in body (for CLI)
     const response = NextResponse.json({
       success: true,
+      token,
       user: { name: account.name, email: account.email },
     })
 
