@@ -20,7 +20,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { Project, ProjectStatus, IssuePriority } from '@/types'
-import { PROJECT_STATUS_LABELS, PRIORITY_LABELS } from '@/types'
+import { PROJECT_STATUS_LABELS, ISSUE_PRIORITY_LABELS } from '@/types'
+
+const PRIORITY_LABELS = ISSUE_PRIORITY_LABELS
 
 interface ProjectFormDialogProps {
   open: boolean
@@ -28,7 +30,7 @@ interface ProjectFormDialogProps {
   project?: Project | null
   workspaceId: string
   onSubmit: (data: {
-    name: string
+    title: string
     description: string
     icon: string
     status: ProjectStatus
@@ -37,7 +39,7 @@ interface ProjectFormDialogProps {
   }) => Promise<void>
 }
 
-const STATUSES: ProjectStatus[] = ['planned', 'in_progress', 'paused', 'completed', 'cancelled']
+const STATUSES: ProjectStatus[] = ['active', 'on_hold', 'completed', 'cancelled', 'archived']
 const PRIORITIES: IssuePriority[] = ['none', 'low', 'medium', 'high', 'urgent']
 
 export function ProjectFormDialog({
@@ -48,46 +50,45 @@ export function ProjectFormDialog({
   onSubmit,
 }: ProjectFormDialogProps) {
   const isEditing = !!project
-  const [name, setName] = useState(project?.name ?? '')
+  const [title, setTitle] = useState(project?.title ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
   const [icon, setIcon] = useState(project?.icon ?? '📁')
-  const [status, setStatus] = useState<string>(project?.status ?? 'planned')
+  const [status, setStatus] = useState<string>(project?.status ?? 'active')
   const [priority, setPriority] = useState<string>(project?.priority ?? 'none')
   const [submitting, setSubmitting] = useState(false)
 
-  // Sync form when project prop changes (critical for edit mode)
   useEffect(() => {
     if (project) {
-      setName(project.name ?? '')
+      setTitle(project.title ?? '')
       setDescription(project.description ?? '')
       setIcon(project.icon ?? '📁')
-      setStatus(project.status ?? 'planned')
+      setStatus(project.status ?? 'active')
       setPriority(project.priority ?? 'none')
     } else {
-      setName('')
+      setTitle('')
       setDescription('')
       setIcon('📁')
-      setStatus('planned')
+      setStatus('active')
       setPriority('none')
     }
   }, [project])
 
   const resetForm = () => {
-    setName('')
+    setTitle('')
     setDescription('')
     setIcon('📁')
-    setStatus('planned')
+    setStatus('active')
     setPriority('none')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!title.trim()) return
 
     setSubmitting(true)
     try {
       await onSubmit({
-        name: name.trim(),
+        title: title.trim(),
         description: description.trim(),
         icon: icon.trim() || '📁',
         status: status as ProjectStatus,
@@ -134,14 +135,14 @@ export function ProjectFormDialog({
               />
             </div>
             <div className="flex-1 flex flex-col gap-2">
-              <Label htmlFor="project-name">
-                Name <span className="text-destructive">*</span>
+              <Label htmlFor="project-title">
+                Title <span className="text-destructive">*</span>
               </Label>
               <Input
-                id="project-name"
+                id="project-title"
                 placeholder="e.g. API Gateway v2"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 required
               />
             </div>
@@ -201,7 +202,7 @@ export function ProjectFormDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting || !name.trim()}>
+            <Button type="submit" disabled={submitting || !title.trim()}>
               {submitting ? 'Saving...' : isEditing ? 'Update Project' : 'Create Project'}
             </Button>
           </DialogFooter>

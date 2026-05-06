@@ -1,20 +1,15 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveWorkspaceId } from '@/lib/auth-utils'
 
-// GET /api/dashboard?workspaceId=xxx - Get dashboard statistics
+// GET /api/dashboard?workspaceId=xxx - Comprehensive dashboard statistics
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get('workspaceId')
-
+    const workspaceId = await resolveWorkspaceId(request)
     if (!workspaceId) {
-      return NextResponse.json(
-        { error: 'workspaceId query parameter is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 401 })
     }
 
-    // Run all queries in parallel for performance
     const [
       workspace,
       agents,
@@ -23,8 +18,10 @@ export async function GET(request: NextRequest) {
       recentActivity,
       taskStats,
       activeTasks,
+      skillCount,
+      memberCount,
+      chatSessionCount,
     ] = await Promise.all([
-      // Workspace info
       db().workspace.findUnique({
         where: { id: workspaceId },
         include: {
@@ -41,100 +38,62 @@ export async function GET(request: NextRequest) {
         },
       }),
 
-      // Agents with status counts
       db().agent.findMany({
-        where: { workspaceId },
-        include: {
-          _count: {
-            select: {
-              tasks: true,
-            },
-          },
-        },
+        where: { workspaceId, isArchived: false },
+        include: { _count: { select: { tasks: true } } },
       }),
 
-      // All issues for status breakdown
       db().issue.findMany({
         where: { workspaceId },
-        select: {
-          id: true,
-          status: true,
-          priority: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: { id: true, status: true, priority: true, createdAt: true, updatedAt: true },
       }),
 
-      // Projects with issue counts
       db().project.findMany({
         where: { workspaceId },
         include: {
-          _count: {
-            select: { issues: true },
-          },
-          issues: {
-            select: { status: true },
-          },
+          _count: { select: { issues: true } },
+          issues: { select: { status: true } },
         },
         orderBy: { updatedAt: 'desc' },
       }),
 
-      // Recent activity (last 20)
       db().activityLog.findMany({
-        where: { workspaceId: undefined }, // Activity logs are not directly linked to workspace, use issue relation
+        where: { workspaceId },
         take: 20,
         orderBy: { createdAt: 'desc' },
         include: {
-          issue: {
-            select: {
-              id: true,
-              title: true,
-              workspaceId: true,
-            },
-          },
+          issue: { select: { id: true, title: true } },
         },
       }),
 
-      // Agent task status distribution (filtered to this workspace)
       db().agentTask.groupBy({
         by: ['status'],
-        where: {
-          agent: { workspaceId },
-        },
-        _count: {
-          status: true,
-        },
+        where: { agent: { workspaceId } },
+        _count: { status: true },
       }),
 
-      // Currently running tasks (filtered to this workspace)
       db().agentTask.findMany({
-        where: {
-          status: 'running',
-          agent: { workspaceId },
-        },
+        where: { status: 'running', agent: { workspaceId } },
         include: {
-          agent: {
-            select: { id: true, name: true, avatar: true, provider: true },
-          },
+          agent: { select: { id: true, name: true, provider: true } },
         },
         orderBy: { startedAt: 'desc' },
         take: 10,
       }),
+
+      db().skill.count({ where: { workspaceId } }),
+
+      db().member.count({ where: { workspaceId } }),
+
+      db().chatSession.count({
+        where: { workspaceId, isArchived: false },
+      }),
     ])
 
-    // Filter activity to this workspace
-    const workspaceActivity = recentActivity.filter(
-      (a) => a.issue?.workspaceId === workspaceId
-    )
-
-    // Compute issue status counts
+    // Issue status counts
     const issueStatusCounts: Record<string, number> = {
-      backlog: 0,
-      todo: 0,
-      in_progress: 0,
-      in_review: 0,
-      done: 0,
-      cancelled: 0,
+      backlog: 0, todo: 0, in_progress: 0, in_review: 0,
+      done: 0, blocked: 0, cancelled: 0,
     }
     for (const issue of allIssues) {
       if (issueStatusCounts[issue.status] !== undefined) {
@@ -142,13 +101,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute issue priority counts
+    const openIssues = allIssues.filter(i => !['done', 'cancelled'].includes(i.status)).length
+    const completedIssues = issueStatusCounts.done || 0
+
+    // Issue priority counts
     const issuePriorityCounts: Record<string, number> = {
-      none: 0,
-      low: 0,
-      medium: 0,
-      high: 0,
-      urgent: 0,
+      none: 0, low: 0, medium: 0, high: 0, urgent: 0,
     }
     for (const issue of allIssues) {
       if (issuePriorityCounts[issue.priority] !== undefined) {
@@ -156,13 +114,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute agent status counts
+    // Agent status counts
     const agentStatusCounts: Record<string, number> = {
-      idle: 0,
-      working: 0,
-      blocked: 0,
-      error: 0,
-      offline: 0,
+      idle: 0, working: 0, blocked: 0, error: 0, offline: 0,
     }
     for (const agent of agents) {
       if (agentStatusCounts[agent.status] !== undefined) {
@@ -170,23 +124,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute task status counts from groupBy result
+    // Task status counts
     const taskStatusCounts: Record<string, number> = {}
     for (const ts of taskStats) {
       taskStatusCounts[ts.status] = ts._count.status
     }
 
-    // Compute project progress
+    // Project progress
     const projectProgress = projects.map((project) => {
       const totalIssues = project._count.issues
-      const doneIssues = project.issues.filter(
-        (i) => i.status === 'done'
-      ).length
-      const progress =
-        totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
+      const doneIssues = project.issues.filter(i => i.status === 'done').length
+      const progress = totalIssues > 0 ? Math.round((doneIssues / totalIssues) * 100) : 0
       return {
         id: project.id,
-        name: project.name,
+        title: project.title,
         icon: project.icon,
         status: project.status,
         totalIssues,
@@ -199,6 +150,14 @@ export async function GET(request: NextRequest) {
       workspace,
       overview: {
         totalIssues: allIssues.length,
+        openIssues,
+        completedIssues,
+        totalAgents: agents.length,
+        activeAgents: agentStatusCounts.working || 0,
+        totalProjects: projects.length,
+        totalSkills: skillCount,
+        totalMembers: memberCount,
+        totalChatSessions: chatSessionCount,
         issueStatusCounts,
         issuePriorityCounts,
         agentStatusCounts,
@@ -206,7 +165,7 @@ export async function GET(request: NextRequest) {
       },
       agents,
       projects: projectProgress,
-      recentActivity: workspaceActivity,
+      recentActivity,
       activeTasks,
     })
   } catch (error) {

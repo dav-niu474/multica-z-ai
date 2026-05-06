@@ -44,8 +44,11 @@ import {
   ISSUE_STATUS_COLORS,
   ISSUE_STATUS_LABELS,
   PRIORITY_COLORS,
-  PRIORITY_LABELS,
+  ISSUE_PRIORITY_LABELS,
 } from '@/types'
+
+// Aliases for compatibility
+const PRIORITY_LABELS = ISSUE_PRIORITY_LABELS
 import { ProjectFormDialog } from '@/components/projects/project-form-dialog'
 
 interface ProjectWithStats extends Project {
@@ -133,7 +136,7 @@ export function ProjectsView({ workspaceId, onNavigateToIssue }: ProjectIssuesVi
 
   // Submit handler
   const handleProjectSubmit = async (data: {
-    name: string
+    title: string
     description: string
     icon: string
     status: ProjectStatus
@@ -266,7 +269,7 @@ export function ProjectsView({ workspaceId, onNavigateToIssue }: ProjectIssuesVi
                         </div>
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-base truncate">
-                            {project.name}
+                            {project.title}
                           </CardTitle>
                           {project.description && (
                             <CardDescription className="line-clamp-2 text-xs mt-0.5">
@@ -312,7 +315,7 @@ export function ProjectsView({ workspaceId, onNavigateToIssue }: ProjectIssuesVi
                         variant="secondary"
                         className={`text-xs ${PRIORITY_COLORS[project.priority as IssuePriority]}`}
                       >
-                        {PRIORITY_LABELS[project.priority as IssuePriority]}
+                        {PRIORITY_LABELS[project.priority as IssuePriority] ?? project.priority}
                       </Badge>
                     </div>
 
@@ -456,7 +459,7 @@ export function ProjectsView({ workspaceId, onNavigateToIssue }: ProjectIssuesVi
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? The issues in this
+              Are you sure you want to delete &quot;{deleteTarget?.title}&quot;? The issues in this
               project will not be deleted, but they will no longer be associated with this project.
             </DialogDescription>
           </DialogHeader>

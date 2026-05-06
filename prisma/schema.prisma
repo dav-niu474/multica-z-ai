@@ -1,103 +1,133 @@
 // AgentHub - Multi-Agent Team Collaboration Platform
+// Enhanced Prisma Schema (Multica reference architecture)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-// ============ WORKSPACE ============
+// ============================================================================
+// USER & WORKSPACE
+// ============================================================================
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  name        String
+  avatarUrl   String?
+  onboardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  memberships Member[]
+  invitedBy   Invitation[] @relation("InvitedBy")
+
+  @@index([email])
+}
+
 model Workspace {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   name        String
   slug        String   @unique
   description String?
   context     String?
   icon        String?
+  issuePrefix String   @default("ISSUE")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members      Member[]
-  agents       Agent[]
-  issues       Issue[]
-  projects     Project[]
-  skills       Skill[]
-  chatSessions ChatSession[]
-}
+  members       Member[]
+  invitations   Invitation[]
+  agents        Agent[]
+  issues        Issue[]
+  issueLabels   IssueLabel[]
+  projects      Project[]
+  skills        Skill[]
+  chatSessions  ChatSession[]
+  inboxItems    InboxItem[]
+  autopilots    Autopilot[]
+  runtimes      AgentRuntime[]
+  activityLogs  ActivityLog[]
+  comments      Comment[]
+  pinnedItems   PinnedItem[]
+  accessTokens  PersonalAccessToken[]
 
-// ============ USER & MEMBER ============
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  avatar    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  memberships Member[]
+  @@index([slug])
 }
 
 model Member {
-  id          String   @id @default(cuid())
-  role        String   @default("member")
+  id          String   @id @default(uuid())
   userId      String
   workspaceId String
+  role        String   @default("member") // 'owner' | 'admin' | 'member'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id])
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
 }
 
-// ============ AGENT ============
+model Invitation {
+  id          String    @id @default(uuid())
+  workspaceId String
+  email       String
+  role        String    @default("member") // 'owner' | 'admin' | 'member'
+  invitedBy   String
+  status      String    @default("pending") // 'pending' | 'accepted' | 'declined'
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedByUser User @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([status])
+}
+
+// ============================================================================
+// AGENT SYSTEM
+// ============================================================================
+
 model Agent {
-  id           String   @id @default(cuid())
-  name         String
-  description  String?
-  avatar       String?
-  provider     String   @default("claude")
-  instructions String?
-  status       String   @default("idle")
-  maxConcurrent Int     @default(3)
-  visibility   String   @default("workspace")
-  customEnv    String?
-  customArgs   String?
-  mcpConfig    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  provider         String   @default("claude")
+  instructions     String?
+  status           String   @default("idle") // 'idle' | 'working' | 'blocked' | 'error' | 'offline'
+  maxConcurrentTasks Int    @default(3)
+  visibility       String   @default("workspace") // 'workspace' | 'private'
+  model            String?
+  mcpConfig        Json?
+  isArchived       Boolean  @default(false)
+  ownerId          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  skills AgentSkill[]
-  tasks  AgentTask[]
-}
+  skills   AgentSkill[]
+  tasks    AgentTask[]
+  runtimes AgentRuntime[]
+  autopilots Autopilot[]
 
-// ============ SKILL ============
-model Skill {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  content     String
-  type        String   @default("skill")  // "skill" or "tool"
-  category    String?
-  source      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  agents AgentSkill[]
+  @@index([workspaceId])
+  @@index([status])
+  @@index([isArchived])
 }
 
 model AgentSkill {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   agentId   String
   skillId   String
   createdAt DateTime @default(now())
@@ -106,90 +136,208 @@ model AgentSkill {
   skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, skillId])
+  @@index([agentId])
+  @@index([skillId])
 }
 
-// ============ ISSUE ============
+model AgentTask {
+  id             String    @id @default(uuid())
+  agentId        String
+  issueId        String?
+  chatSessionId  String?
+  autopilotRunId String?
+  status         String    @default("queued") // 'queued' | 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled'
+  priority       String    @default("none")   // IssuePriority
+  output         String? 
+  failureReason  String? 
+  tokensUsed     Int       @default(0)
+  elapsedMs      Int?
+  kind           String?
+  retries        Int       @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  agent       Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  issue       Issue?      @relation(fields: [issueId], references: [id])
+  chatSession ChatSession? @relation(fields: [chatSessionId], references: [id])
+  autopilotRun AutopilotRun? @relation(fields: [autopilotRunId], references: [id])
+
+  @@index([agentId])
+  @@index([issueId])
+  @@index([status])
+  @@index([chatSessionId])
+  @@index([autopilotRunId])
+}
+
+model AgentRuntime {
+  id            String    @id @default(uuid())
+  agentId       String
+  provider      String?
+  status        String    @default("offline")
+  deviceInfo    Json?
+  os            String?
+  cliVersion    String?
+  daemonUuid    String?   @unique
+  lastHeartbeat DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId]) // One runtime per agent
+  @@index([workspaceId])
+  @@index([status])
+  @@index([daemonUuid])
+}
+
+// ============================================================================
+// ISSUE SYSTEM
+// ============================================================================
+
 model Issue {
-  id          String    @id @default(cuid())
-  title       String
-  description String?
-  status      String    @default("backlog")
-  priority    String    @default("none")
-  order       Int       @default(0)
-  assigneeType String?
+  id           String    @id @default(uuid())
+  identifier   String    @unique // e.g., "AH-1"
+  title        String
+  description  String? 
+  status       String    @default("backlog") // IssueStatus
+  priority     String    @default("none")    // IssuePriority
+  assigneeType String?   // 'member' | 'agent'
   assigneeId   String?
-  creatorType  String    @default("member")
-  creatorId    String?
   projectId    String?
+  parentIssueId String?
+  position     Int       @default(0)
   dueDate      DateTime?
-  labels       String?
+  closedAt     DateTime?
+  reactions    Json      @default("[]") // [{emoji, userId, userName}]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project     Project?  @relation(fields: [projectId], references: [id])
+  parentIssue Issue?    @relation("IssueSubIssues", fields: [parentIssueId], references: [id])
+  subIssues   Issue[]   @relation("IssueSubIssues")
 
-  comments Comment[]
-  tasks    AgentTask[]
-  activity ActivityLog[]
+  labels      IssueToLabel[]
+  subscribers IssueSubscriber[]
+  dependencies IssueDependency[] @relation("IssueDependencyFrom")
+  dependedOnBy IssueDependency[] @relation("IssueDependencyTo")
+  comments    Comment[]
+  tasks       AgentTask[]
+  activity    ActivityLog[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([priority])
+  @@index([assigneeType, assigneeId])
+  @@index([projectId])
+  @@index([parentIssueId])
+  @@index([identifier])
+  @@index([position])
+  @@index([dueDate])
+  @@index([createdAt])
 }
 
-// ============ COMMENT ============
-model Comment {
-  id        String   @id @default(cuid())
-  content   String
-  authorType String   @default("member")
-  authorId   String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  issueId String
-  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
-}
-
-// ============ AGENT TASK ============
-model AgentTask {
-  id          String    @id @default(cuid())
-  status      String    @default("queued")
-  output      String?
-  tokensUsed  Int       @default(0)
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  agentId String
-  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  issueId String?
-  issue   Issue? @relation(fields: [issueId], references: [id])
-
-  chatSessionId String?
-  chatSession   ChatSession? @relation(fields: [chatSessionId], references: [id])
-}
-
-// ============ PROJECT ============
-model Project {
-  id          String   @id @default(cuid())
+model IssueLabel {
+  id          String   @id @default(uuid())
   name        String
-  description String?
-  icon        String?
-  status      String   @default("planned")
-  priority    String   @default("none")
+  color       String   @default("#6b7280") // hex color
+  workspaceId String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  issues    IssueToLabel[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model IssueToLabel {
+  id        String   @id @default(uuid())
+  issueId   String
+  labelId   String
+  createdAt DateTime @default(now())
+
+  issue Issue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label IssueLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, labelId])
+  @@index([issueId])
+  @@index([labelId])
+}
+
+model IssueSubscriber {
+  id        String   @id @default(uuid())
+  issueId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, userId])
+  @@index([issueId])
+  @@index([userId])
+}
+
+model IssueDependency {
+  id               String   @id @default(uuid())
+  fromIssueId      String
+  toIssueId        String
+  createdAt        DateTime @default(now())
+
+  fromIssue Issue @relation("IssueDependencyFrom", fields: [fromIssueId], references: [id], onDelete: Cascade)
+  toIssue   Issue @relation("IssueDependencyTo", fields: [toIssueId], references: [id], onDelete: Cascade)
+
+  @@unique([fromIssueId, toIssueId])
+  @@index([fromIssueId])
+  @@index([toIssueId])
+}
+
+// ============================================================================
+// COMMENT SYSTEM
+// ============================================================================
+
+model Comment {
+  id          String   @id @default(uuid())
+  content     String 
+  type        String   @default("comment") // 'comment' | 'status_change' | 'progress_update' | 'system'
+  authorType  String   @default("member")  // 'member' | 'agent' | 'system'
+  authorId    String
+  authorName  String   @default("")
+  authorAvatar String?
+  parentId    String?  // for threaded replies
+  reactions   Json     @default("[]")       // [{emoji, userId, userName}]
+  attachments Json     @default("[]")       // [{id, name, url, size, mimeType}]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     Comment[] @relation("CommentReplies")
 
-  issues Issue[]
+  @@index([issueId])
+  @@index([workspaceId])
+  @@index([parentId])
+  @@index([authorType, authorId])
+  @@index([createdAt])
 }
 
-// ============ CHAT SESSION ============
+// ============================================================================
+// CHAT SYSTEM
+// ============================================================================
+
 model ChatSession {
-  id          String   @id @default(cuid())
-  title       String?
+  id          String   @id @default(uuid())
+  title       String   @default("New Chat")
   agentId     String?
+  status      String   @default("active")
   unreadCount Int      @default(0)
   isArchived  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -200,30 +348,264 @@ model ChatSession {
 
   messages ChatMessage[]
   tasks    AgentTask[]
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@index([isArchived])
+  @@index([updatedAt])
 }
 
-// ============ CHAT MESSAGE ============
 model ChatMessage {
-  id        String   @id @default(cuid())
-  role      String
-  content   String
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  role          String   // 'user' | 'assistant'
+  content       String 
+  taskId        String?
+  failureReason String?
+  elapsedMs     Int?
+  createdAt     DateTime @default(now())
 
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
 }
 
-// ============ ACTIVITY LOG ============
+// ============================================================================
+// PROJECT SYSTEM
+// ============================================================================
+
+model Project {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  icon        String?
+  status      String   @default("active") // ProjectStatus
+  priority    String   @default("none")   // ProjectPriority
+  leadType    String?  // 'member' | 'agent'
+  leadId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  issues    Issue[]
+  resources ProjectResource[]
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model ProjectResource {
+  id         String   @id @default(uuid())
+  projectId  String
+  type       String   // 'github_repo' | 'doc' | 'link' | etc.
+  name       String
+  url        String
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// ============================================================================
+// SKILL SYSTEM
+// ============================================================================
+
+model Skill {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     String?
+  type        String   @default("skill") // 'skill' | 'tool'
+  category    String?  // 'engineering' | 'testing' | etc.
+  source      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  agents AgentSkill[]
+  files  SkillFile[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([type])
+  @@index([category])
+}
+
+model SkillFile {
+  id        String   @id @default(uuid())
+  skillId   String
+  name      String
+  path      String
+  content   String 
+  createdAt DateTime @default(now())
+
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+}
+
+// ============================================================================
+// INBOX / NOTIFICATIONS
+// ============================================================================
+
+model InboxItem {
+  id              String   @id @default(uuid())
+  type            String   // InboxItemType
+  severity        String   @default("info") // 'info' | 'warning' | 'error'
+  title           String
+  body            String?
+  recipientType   String   @default("member") // 'member' | 'agent'
+  recipientId     String
+  issueId         String?
+  issueIdentifier String?
+  issueTitle      String?
+  read            Boolean  @default(false)
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([recipientType, recipientId])
+  @@index([read])
+  @@index([archived])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// AUTOPILOT SYSTEM
+// ============================================================================
+
+model Autopilot {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  agentId        String
+  executionMode  String   @default("create_issue") // 'create_issue' | 'run_only'
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       Agent      @relation(fields: [agentId], references: [id])
+
+  triggers AutopilotTrigger[]
+  runs     AutopilotRun[]
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@index([isActive])
+}
+
+model AutopilotTrigger {
+  id             String   @id @default(uuid())
+  autopilotId    String
+  kind           String   // 'schedule' | 'webhook' | 'api'
+  cronExpression String?
+  webhookToken   String?  @unique
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  autopilot Autopilot @relation(fields: [autopilotId], references: [id], onDelete: Cascade)
+
+  @@index([autopilotId])
+  @@index([kind])
+}
+
+model AutopilotRun {
+  id           String    @id @default(uuid())
+  autopilotId  String
+  status       String    @default("pending") // 'pending' | 'running' | 'completed' | 'failed'
+  triggerKind  String    // 'schedule' | 'webhook' | 'api'
+  output       String? 
+  error        String? 
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  autopilot Autopilot @relation(fields: [autopilotId], references: [id], onDelete: Cascade)
+  tasks     AgentTask[]
+
+  @@index([autopilotId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// ACTIVITY & AUDIT LOG
+// ============================================================================
+
 model ActivityLog {
-  id         String   @id @default(cuid())
+  id         String   @id @default(uuid())
   action     String
   entityType String
   entityId   String
-  actorType  String?
+  actorType  String?  // 'member' | 'agent' | 'system'
   actorId    String?
-  metadata   String?
+  actorName  String?  @default("")
+  actorAvatar String?
+  details    Json?    // flexible metadata
   createdAt  DateTime @default(now())
 
-  issueId String?
-  issue   Issue? @relation(fields: [issueId], references: [id])
+  issueId     String?
+  issue       Issue?  @relation(fields: [issueId], references: [id])
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([issueId])
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// PINNED ITEMS
+// ============================================================================
+
+model PinnedItem {
+  id          String   @id @default(uuid())
+  type        String   // 'issue' | 'project'
+  itemId      String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, type, itemId])
+  @@index([workspaceId])
+  @@index([type])
+  @@index([order])
+}
+
+// ============================================================================
+// PERSONAL ACCESS TOKENS
+// ============================================================================
+
+model PersonalAccessToken {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  prefix     String    // first 8 chars of the token for display
+  tokenHash  String    @unique // hashed token
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([workspaceId])
 }

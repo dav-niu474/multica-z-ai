@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
-// GET /api/agents/[id] - Get single agent
+// GET /api/agents/[id] - Full agent with skills
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,10 +33,7 @@ export async function GET(
     return NextResponse.json(agent)
   } catch (error) {
     console.error('Error fetching agent:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch agent' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch agent' }, { status: 500 })
   }
 }
 
@@ -51,14 +48,13 @@ export async function PUT(
     const {
       name,
       description,
-      avatar,
       provider,
       instructions,
-      maxConcurrent,
+      maxConcurrentTasks,
       visibility,
-      customEnv,
-      customArgs,
+      model,
       mcpConfig,
+      skillIds,
     } = body
 
     const existing = await db().agent.findUnique({ where: { id } })
@@ -66,18 +62,26 @@ export async function PUT(
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
+    // Handle skill updates if provided
+    if (skillIds !== undefined) {
+      await db().agentSkill.deleteMany({ where: { agentId: id } })
+      if (Array.isArray(skillIds) && skillIds.length > 0) {
+        await db().agentSkill.createMany({
+          data: skillIds.map((skillId: string) => ({ agentId: id, skillId })),
+        })
+      }
+    }
+
     const agent = await db().agent.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
-        ...(avatar !== undefined && { avatar }),
         ...(provider !== undefined && { provider }),
         ...(instructions !== undefined && { instructions }),
-        ...(maxConcurrent !== undefined && { maxConcurrent }),
+        ...(maxConcurrentTasks !== undefined && { maxConcurrentTasks }),
         ...(visibility !== undefined && { visibility }),
-        ...(customEnv !== undefined && { customEnv }),
-        ...(customArgs !== undefined && { customArgs }),
+        ...(model !== undefined && { model }),
         ...(mcpConfig !== undefined && { mcpConfig }),
       },
       include: {
@@ -92,14 +96,11 @@ export async function PUT(
     return NextResponse.json(agent)
   } catch (error) {
     console.error('Error updating agent:', error)
-    return NextResponse.json(
-      { error: 'Failed to update agent' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 })
   }
 }
 
-// DELETE /api/agents/[id] - Delete agent
+// DELETE /api/agents/[id] - Archive agent (soft delete)
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -111,13 +112,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    await db().agent.delete({ where: { id } })
-    return NextResponse.json({ success: true })
+    await db().agent.update({
+      where: { id },
+      data: { isArchived: true, status: 'offline' },
+    })
+
+    return NextResponse.json({ success: true, isArchived: true })
   } catch (error) {
-    console.error('Error deleting agent:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete agent' },
-      { status: 500 }
-    )
+    console.error('Error archiving agent:', error)
+    return NextResponse.json({ error: 'Failed to archive agent' }, { status: 500 })
   }
 }

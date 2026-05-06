@@ -1,8 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { notifyIssueUpdated } from '@/lib/realtime-notify'
 
-// GET /api/issues/[id] - Get single issue with full details
+// GET /api/issues/[id] - Full issue with labels, reactions, subscriber count, comment count
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -13,15 +12,21 @@ export async function GET(
       where: { id },
       include: {
         project: {
-          select: { id: true, name: true, icon: true },
+          select: { id: true, title: true, icon: true },
+        },
+        labels: {
+          include: { label: true },
+        },
+        subscribers: {
+          select: { id: true, userId: true },
         },
         comments: {
-          orderBy: { createdAt: 'asc' },
+          select: { id: true },
         },
         tasks: {
           include: {
             agent: {
-              select: { id: true, name: true, avatar: true, provider: true },
+              select: { id: true, name: true, provider: true },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -33,6 +38,12 @@ export async function GET(
         workspace: {
           select: { id: true, name: true },
         },
+        parentIssue: {
+          select: { id: true, identifier: true, title: true },
+        },
+        subIssues: {
+          select: { id: true, identifier: true, title: true, status: true },
+        },
       },
     })
 
@@ -40,23 +51,19 @@ export async function GET(
       return NextResponse.json({ error: 'Issue not found' }, { status: 404 })
     }
 
-    // Parse labels from JSON string if present
-    const result = {
+    return NextResponse.json({
       ...issue,
-      labels: issue.labels ? JSON.parse(issue.labels) : [],
-    }
-
-    return NextResponse.json(result)
+      labelCount: issue.labels.length,
+      subscriberCount: issue.subscribers.length,
+      commentCount: issue.comments.length,
+    })
   } catch (error) {
     console.error('Error fetching issue:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch issue' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch issue' }, { status: 500 })
   }
 }
 
-// PUT /api/issues/[id] - Update issue (status, priority, assignee, etc.)
+// PUT /api/issues/[id] - Update issue + log activity
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -69,12 +76,13 @@ export async function PUT(
       description,
       status,
       priority,
-      order,
+      position,
       assigneeType,
       assigneeId,
       projectId,
+      parentIssueId,
       dueDate,
-      labels,
+      labelIds,
     } = body
 
     const existing = await db().issue.findUnique({ where: { id } })
@@ -90,16 +98,27 @@ export async function PUT(
           entityType: 'issue',
           entityId: id,
           actorType: 'member',
-          metadata: JSON.stringify({
-            from: existing.status,
-            to: status,
-          }),
+          details: { from: existing.status, to: status },
           issueId: id,
+          workspaceId: existing.workspaceId,
         },
       })
+
+      // Auto-set closedAt when status is done
+      if (status === 'done' && !existing.closedAt) {
+        await db().issue.update({
+          where: { id },
+          data: { closedAt: new Date() },
+        })
+      } else if (status !== 'done' && existing.closedAt) {
+        await db().issue.update({
+          where: { id },
+          data: { closedAt: null },
+        })
+      }
     }
 
-    // Log priority change activity
+    // Log priority change
     if (priority && priority !== existing.priority) {
       await db().activityLog.create({
         data: {
@@ -107,90 +126,87 @@ export async function PUT(
           entityType: 'issue',
           entityId: id,
           actorType: 'member',
-          metadata: JSON.stringify({
-            from: existing.priority,
-            to: priority,
-          }),
+          details: { from: existing.priority, to: priority },
           issueId: id,
+          workspaceId: existing.workspaceId,
         },
       })
     }
 
-    // Log assignment change activity
-    if (
-      (assigneeId !== undefined && assigneeId !== existing.assigneeId) ||
-      (assigneeType !== undefined && assigneeType !== existing.assigneeType)
-    ) {
+    // Log assignment change
+    if (assigneeId !== undefined && assigneeId !== existing.assigneeId) {
       await db().activityLog.create({
         data: {
           action: 'assigned',
           entityType: 'issue',
           entityId: id,
           actorType: 'member',
-          metadata: JSON.stringify({
+          details: {
             fromAssignee: existing.assigneeId,
             toAssignee: assigneeId || null,
             assigneeType: assigneeType || existing.assigneeType,
-          }),
+          },
           issueId: id,
+          workspaceId: existing.workspaceId,
         },
       })
     }
 
+    const updateData: Record<string, unknown> = {
+      ...(title !== undefined && { title }),
+      ...(description !== undefined && { description }),
+      ...(status !== undefined && { status }),
+      ...(priority !== undefined && { priority }),
+      ...(position !== undefined && { position }),
+      ...(assigneeType !== undefined && { assigneeType }),
+      ...(assigneeId !== undefined && { assigneeId }),
+      ...(projectId !== undefined && { projectId }),
+      ...(parentIssueId !== undefined && { parentIssueId }),
+      ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+    }
+
     const issue = await db().issue.update({
       where: { id },
-      data: {
-        ...(title !== undefined && { title }),
-        ...(description !== undefined && { description }),
-        ...(status !== undefined && { status }),
-        ...(priority !== undefined && { priority }),
-        ...(order !== undefined && { order }),
-        ...(assigneeType !== undefined && { assigneeType }),
-        ...(assigneeId !== undefined && { assigneeId }),
-        ...(projectId !== undefined && { projectId }),
-        ...(dueDate !== undefined && {
-          dueDate: dueDate ? new Date(dueDate) : null,
-        }),
-        ...(labels !== undefined && {
-          labels: labels ? JSON.stringify(labels) : null,
-        }),
-      },
+      data: updateData,
       include: {
         project: {
-          select: { id: true, name: true, icon: true },
+          select: { id: true, title: true, icon: true },
+        },
+        labels: {
+          include: { label: true },
         },
       },
     })
 
-    const result = {
-      ...issue,
-      labels: issue.labels ? JSON.parse(issue.labels) : [],
+    // Handle label updates
+    if (labelIds !== undefined && Array.isArray(labelIds)) {
+      // Remove existing labels
+      await db().issueToLabel.deleteMany({ where: { issueId: id } })
+      // Add new labels
+      if (labelIds.length > 0) {
+        await db().issueToLabel.createMany({
+          data: labelIds.map((labelId: string) => ({ issueId: id, labelId })),
+        })
+      }
+      // Re-fetch with labels
+      const updated = await db().issue.findUnique({
+        where: { id },
+        include: {
+          project: { select: { id: true, title: true, icon: true } },
+          labels: { include: { label: true } },
+        },
+      })
+      if (updated) return NextResponse.json(updated)
     }
 
-    // Notify realtime clients about the issue update
-    const changes: Record<string, unknown> = {}
-    if (status !== undefined) changes.status = status
-    if (priority !== undefined) changes.priority = priority
-    if (title !== undefined) changes.title = title
-    if (assigneeId !== undefined) changes.assigneeId = assigneeId
-    if (projectId !== undefined) changes.projectId = projectId
-
-    // Fire and forget — don't block the response
-    if (issue.workspaceId && Object.keys(changes).length > 0) {
-      notifyIssueUpdated(issue.workspaceId, id, changes)
-    }
-
-    return NextResponse.json(result)
+    return NextResponse.json(issue)
   } catch (error) {
     console.error('Error updating issue:', error)
-    return NextResponse.json(
-      { error: 'Failed to update issue' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update issue' }, { status: 500 })
   }
 }
 
-// DELETE /api/issues/[id] - Delete issue
+// DELETE /api/issues/[id] - Delete issue + clean up related data
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -202,13 +218,17 @@ export async function DELETE(
       return NextResponse.json({ error: 'Issue not found' }, { status: 404 })
     }
 
+    // Delete related data explicitly (cascade should handle most)
+    await db().issueToLabel.deleteMany({ where: { issueId: id } })
+    await db().issueSubscriber.deleteMany({ where: { issueId: id } })
+    await db().issueDependency.deleteMany({
+      where: { OR: [{ fromIssueId: id }, { toIssueId: id }] },
+    })
+
     await db().issue.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting issue:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete issue' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete issue' }, { status: 500 })
   }
 }

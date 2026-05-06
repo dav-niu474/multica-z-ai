@@ -1,9 +1,9 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
-// GET /api/projects/[id] - Get a single project
+// GET /api/projects/[id] - Full project with resources
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -12,8 +12,11 @@ export async function GET(
       where: { id },
       include: {
         issues: {
-          select: { id: true, status: true, priority: true, title: true },
-          orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+          select: { id: true, identifier: true, status: true, priority: true, title: true, position: true },
+          orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+        },
+        resources: {
+          orderBy: { createdAt: 'desc' },
         },
         _count: {
           select: { issues: true },
@@ -25,16 +28,20 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    // Add computed status counts
     const statusCounts: Record<string, number> = {}
     for (const issue of project.issues) {
       statusCounts[issue.status] = (statusCounts[issue.status] || 0) + 1
     }
+    const doneCount = statusCounts['done'] || 0
 
     return NextResponse.json({
       ...project,
       statusCounts,
       totalIssues: project._count.issues,
+      doneCount,
+      progress: project._count.issues > 0
+        ? Math.round((doneCount / project._count.issues) * 100)
+        : 0,
     })
   } catch (error) {
     console.error('Error fetching project:', error)
@@ -42,7 +49,7 @@ export async function GET(
   }
 }
 
-// PUT /api/projects/[id] - Update a project
+// PUT /api/projects/[id] - Update project
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -50,16 +57,23 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { name, description, icon, status, priority } = body
+    const { title, description, icon, status, priority, leadType, leadId } = body
+
+    const existing = await db().project.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
 
     const project = await db().project.update({
       where: { id },
       data: {
-        ...(name !== undefined ? { name } : {}),
-        ...(description !== undefined ? { description: description || null } : {}),
-        ...(icon !== undefined ? { icon: icon || null } : {}),
-        ...(status !== undefined ? { status } : {}),
-        ...(priority !== undefined ? { priority } : {}),
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(icon !== undefined && { icon }),
+        ...(status !== undefined && { status }),
+        ...(priority !== undefined && { priority }),
+        ...(leadType !== undefined && { leadType }),
+        ...(leadId !== undefined && { leadId }),
       },
     })
 
@@ -70,13 +84,19 @@ export async function PUT(
   }
 }
 
-// DELETE /api/projects/[id] - Delete a project
+// DELETE /api/projects/[id] - Delete project
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const existing = await db().project.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    await db().projectResource.deleteMany({ where: { projectId: id } })
     await db().project.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

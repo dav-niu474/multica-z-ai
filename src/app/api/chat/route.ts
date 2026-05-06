@@ -1,17 +1,13 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveWorkspaceId } from '@/lib/auth-utils'
 
-// GET /api/chat?workspaceId=xxx - List chat sessions
+// GET /api/chat?workspaceId=xxx - List chat sessions with agent info and unread counts
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get('workspaceId')
-
+    const workspaceId = await resolveWorkspaceId(request)
     if (!workspaceId) {
-      return NextResponse.json(
-        { error: 'workspaceId query parameter is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 401 })
     }
 
     const sessions = await db().chatSession.findMany({
@@ -39,7 +35,7 @@ export async function GET(request: NextRequest) {
             id: true,
             status: true,
             agent: {
-              select: { id: true, name: true, avatar: true, provider: true },
+              select: { id: true, name: true, provider: true },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -74,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     const session = await db().chatSession.create({
       data: {
-        title: title || null,
+        title: title || 'New Chat',
         agentId: agentId || null,
         workspaceId,
       },

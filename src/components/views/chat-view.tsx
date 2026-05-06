@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -29,6 +29,23 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Plus,
   Send,
   Bot,
@@ -40,6 +57,9 @@ import {
   AlertCircle,
   Cpu,
   Zap,
+  Trash2,
+  MoreHorizontal,
+  ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
@@ -47,7 +67,8 @@ import { useTranslation } from '@/lib/i18n'
 import ChatMessageBubble from '@/components/chat/chat-message'
 import type { ChatSession, ChatMessage, Agent } from '@/types'
 
-// Streaming event types from the SSE endpoint
+// ==================== Streaming Event Types ====================
+
 interface StreamMetadata {
   type: 'metadata'
   provider: string
@@ -73,7 +94,6 @@ interface StreamError {
 
 type StreamEvent = StreamMetadata | StreamChunk | StreamDone | StreamError
 
-// Completion response (non-streaming)
 interface CompletionResponse {
   userMessage: string
   agentMessage: {
@@ -94,7 +114,6 @@ interface CompletionResponse {
   error?: string
 }
 
-// Token usage attached to a message for display
 interface MessageUsage {
   provider: string
   providerName: string
@@ -108,7 +127,8 @@ interface ChatViewProps {
   workspaceId: string
 }
 
-// Animated typing dots component
+// ==================== Typing Dots ====================
+
 function TypingDots() {
   return (
     <div className="flex items-center gap-1.5 px-1 py-1">
@@ -122,6 +142,128 @@ function TypingDots() {
     </div>
   )
 }
+
+// ==================== Task Status Pill ====================
+
+function TaskStatusPill({ status, label }: { status: string; label?: string }) {
+  const statusClasses: Record<string, string> = {
+    running: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    failed: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border-red-200 dark:border-red-800',
+    queued: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700',
+  }
+
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${statusClasses[status] ?? statusClasses.queued}`}>
+      {status === 'running' && <Loader2 className="h-3 w-3 animate-spin" />}
+      {status === 'completed' && <Zap className="h-3 w-3" />}
+      {status === 'failed' && <AlertCircle className="h-3 w-3" />}
+      {label ?? status}
+    </div>
+  )
+}
+
+// ==================== Session List Item ====================
+
+interface SessionItemProps {
+  session: ChatSession
+  isSelected: boolean
+  onClick: () => void
+  onDelete: () => void
+}
+
+function SessionItem({ session, isSelected, onClick, onDelete }: SessionItemProps) {
+  const lastMsg = session.messages?.[0]
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left p-3 rounded-lg transition-colors group ${
+        isSelected
+          ? 'bg-primary/10 border border-primary/20'
+          : 'hover:bg-muted/50 border border-transparent'
+      }`}
+    >
+      <div className="flex items-start gap-2.5">
+        <Avatar className="h-8 w-8 shrink-0">
+          <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+            <Bot className="h-4 w-4" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium truncate">
+              {session.title || 'New Chat'}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              {session.unreadCount > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-[16px] px-1 text-[10px] bg-primary text-primary-foreground">
+                  {session.unreadCount}
+                </Badge>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-32">
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {lastMsg
+              ? lastMsg.content.slice(0, 50) + (lastMsg.content.length > 50 ? '...' : '')
+              : 'No messages yet'}
+          </p>
+          <span className="text-[10px] text-muted-foreground mt-0.5 block">
+            {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
+          </span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ==================== Empty State ====================
+
+function EmptyState({ icon: Icon, title, description, action }: {
+  icon: React.ElementType
+  title: string
+  description: string
+  action?: { label: string; onClick: () => void }
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center py-16">
+      <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+        <Icon className="h-7 w-7 text-muted-foreground/40" />
+      </div>
+      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+      <p className="text-xs text-muted-foreground/70 mt-1 max-w-[260px]">{description}</p>
+      {action && (
+        <Button variant="outline" size="sm" className="mt-4 text-xs" onClick={action.onClick}>
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          {action.label}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// ==================== Main Chat View ====================
 
 export default function ChatView({ workspaceId }: ChatViewProps) {
   const { t } = useTranslation()
@@ -143,15 +285,11 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
   const [streamingContent, setStreamingContent] = useState('')
   const [streamingModel, setStreamingModel] = useState('')
 
-  // Track token usage per message (indexed by message id)
+  // Token usage per message
   const [messageUsageMap, setMessageUsageMap] = useState<Record<string, MessageUsage>>({})
-
-  // Track last response model info for header display
   const [lastModelInfo, setLastModelInfo] = useState<{ provider: string; model: string } | null>(null)
 
-  // Abort controller ref for cancelling streaming
   const abortControllerRef = useRef<AbortController | null>(null)
-
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -205,7 +343,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
     }
   }, [selectedSessionId, fetchMessages])
 
-  // Auto-scroll to bottom when messages or streaming content changes
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
@@ -220,7 +358,6 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
   // Focus textarea when session changes
   useEffect(() => {
     if (selectedSessionId) {
-      // Small delay to allow DOM to update
       const timer = setTimeout(() => {
         textareaRef.current?.focus()
       }, 100)
@@ -228,9 +365,39 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
     }
   }, [selectedSessionId])
 
+  // Responsive sidebar: hide on mobile by default
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setSidebarOpen(false)
+      }
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const getAgent = (agentId: string | null) => {
     if (!agentId) return null
     return agents.find((a) => a.id === agentId)
+  }
+
+  const selectedSession = sessions.find((s) => s.id === selectedSessionId)
+  const selectedAgent = selectedSession?.agentId ? getAgent(selectedSession.agentId) : null
+
+  // Session delete handler
+  async function handleDeleteSession(sessionId: string) {
+    try {
+      const res = await fetch(`/api/chat/${sessionId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete session')
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null)
+      }
+      toast.success('Chat deleted')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete chat')
+    }
   }
 
   const handleSendMessage = async () => {
@@ -243,12 +410,11 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
     setStreamingContent('')
     setStreamingModel('')
 
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
 
-    // Optimistically add the user message to the UI
+    // Optimistic user message
     const optimisticUserMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -259,7 +425,6 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
     setMessages((prev) => [...prev, optimisticUserMsg])
 
     try {
-      // Call the AI completion endpoint with streaming
       abortControllerRef.current = new AbortController()
 
       const res = await fetch('/api/chat/complete', {
@@ -274,32 +439,26 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
       })
 
       if (!res.ok) {
-        // Try to parse error from non-streaming response
         let errorMsg = t.chat.sendFailed
         try {
           const errData = await res.json()
           errorMsg = errData.error || errorMsg
-        } catch {
-          // Response might not be JSON
-        }
+        } catch {}
 
         if (res.status === 400 || res.status === 404) {
-          // Session errors - remove optimistic message
           setMessages((prev) => prev.filter((m) => m.id !== optimisticUserMsg.id))
           toast.error(t.chat.sendFailed, { description: errorMsg })
           setSendingMessage(false)
           return
         }
-
         throw new Error(errorMsg)
       }
 
-      // Handle no provider configured (non-streaming JSON fallback)
+      // Handle JSON fallback
       const contentType = res.headers.get('content-type') || ''
       if (contentType.includes('application/json')) {
         const data: CompletionResponse = await res.json()
         if (data.error) {
-          // Show error as system message
           const sysMsg: ChatMessage = {
             id: `sys-${Date.now()}`,
             role: 'system',
@@ -309,15 +468,19 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
           }
           setMessages((prev) => [...prev, sysMsg])
           if (data.error.includes('No model provider configured')) {
-            toast.error(t.chat.noProviderConfigured, {
-              description: t.chat.noProviderHint,
-            })
+            toast.error(t.chat.noProviderConfigured, { description: t.chat.noProviderHint })
           } else {
             toast.error(t.chat.aiError, { description: data.error })
           }
         } else if (data.agentMessage) {
-          // Non-streaming fallback response
-          setMessages((prev) => [...prev, data.agentMessage!])
+          const agentMsg: ChatMessage = {
+            id: data.agentMessage.id,
+            role: 'agent',
+            content: data.agentMessage.content,
+            createdAt: data.agentMessage.createdAt,
+            sessionId: selectedSessionId,
+          }
+          setMessages((prev) => [...prev, agentMsg])
           if (data.usage && data.agentMessage) {
             setMessageUsageMap((prev) => ({
               ...prev,
@@ -325,9 +488,9 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                 provider: data.provider || 'unknown',
                 providerName: data.providerName || data.provider || 'Unknown',
                 model: data.modelDisplayName || data.model || 'unknown',
-                promptTokens: data.usage.promptTokens,
-                completionTokens: data.usage.completionTokens,
-                totalTokens: data.usage.totalTokens,
+                promptTokens: data.usage!.promptTokens,
+                completionTokens: data.usage!.completionTokens,
+                totalTokens: data.usage!.totalTokens,
               },
             }))
           }
@@ -340,13 +503,10 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
         return
       }
 
-      // Stream the response
+      // Stream
       setIsStreaming(true)
-
       const reader = res.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body')
-      }
+      if (!reader) throw new Error('No response body')
 
       const decoder = new TextDecoder()
       let buffer = ''
@@ -376,14 +536,11 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                 setStreamingModel(event.model)
                 setLastModelInfo({ provider: event.provider, model: event.model })
                 break
-
               case 'chunk':
                 accumulatedContent += event.content
                 setStreamingContent(accumulatedContent)
                 break
-
               case 'done': {
-                // Add the final message to the list
                 const agentMsg: ChatMessage = {
                   id: event.messageId,
                   role: 'agent',
@@ -397,9 +554,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                 setStreamingModel('')
                 break
               }
-
-              case 'error':
-                // If we have partial content, add it as a message
+              case 'error': {
                 if (accumulatedContent) {
                   const partialMsg: ChatMessage = {
                     id: `partial-${Date.now()}`,
@@ -410,7 +565,6 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                   }
                   setMessages((prev) => [...prev, partialMsg])
                 }
-                // Show error
                 const errSysMsg: ChatMessage = {
                   id: `err-${Date.now()}`,
                   role: 'system',
@@ -424,14 +578,14 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                 setStreamingModel('')
                 toast.error(t.chat.aiError, { description: event.error })
                 break
+              }
             }
           } catch {
-            // Skip malformed SSE data
+            // Skip malformed SSE
           }
         }
       }
 
-      // Ensure streaming is cleaned up
       setIsStreaming(false)
       setStreamingContent('')
       setStreamingModel('')
@@ -485,19 +639,12 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
     }
   }
 
-  // Auto-resize textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageInput(e.target.value)
-    // Auto-resize
     const textarea = e.target
     textarea.style.height = 'auto'
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
   }
-
-  const selectedSession = sessions.find((s) => s.id === selectedSessionId)
-  const selectedAgent = selectedSession?.agentId
-    ? getAgent(selectedSession.agentId)
-    : null
 
   if (loading) {
     return (
@@ -565,72 +712,15 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                   </Button>
                 </div>
               ) : (
-                sessions.map((session) => {
-                  const agent = session.agentId ? getAgent(session.agentId) : null
-                  const lastMsg = session.messages?.[0]
-                  const isSelected = session.id === selectedSessionId
-
-                  return (
-                    <button
-                      key={session.id}
-                      onClick={() => setSelectedSessionId(session.id)}
-                      className={`w-full text-left p-3 rounded-lg transition-colors ${
-                        isSelected
-                          ? 'bg-primary/10 border border-primary/20'
-                          : 'hover:bg-muted/50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarFallback
-                            className={`text-xs ${
-                              agent?.avatar
-                                ? ''
-                                : 'bg-muted text-muted-foreground'
-                            }`}
-                          >
-                            {agent?.avatar ? (
-                              <img
-                                src={agent.avatar}
-                                alt={agent.name}
-                                className="h-8 w-8 rounded-full"
-                              />
-                            ) : (
-                              <Bot className="h-4 w-4" />
-                            )}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium truncate">
-                              {session.title || agent?.name || t.chat.newChat}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {session.unreadCount > 0 && (
-                                <Badge
-                                  variant="secondary"
-                                  className="h-4 min-w-[16px] px-1 text-[10px] bg-primary text-primary-foreground"
-                                >
-                                  {session.unreadCount}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <p className="text-xs text-muted-foreground truncate">
-                              {lastMsg
-                                ? lastMsg.content.slice(0, 50) + (lastMsg.content.length > 50 ? '...' : '')
-                                : 'No messages yet'}
-                            </p>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                            {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })
+                sessions.map((session) => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    isSelected={session.id === selectedSessionId}
+                    onClick={() => setSelectedSessionId(session.id)}
+                    onDelete={() => handleDeleteSession(session.id)}
+                  />
+                ))
               )}
             </div>
           </ScrollArea>
@@ -639,7 +729,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Chat header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
             <div className="flex items-center gap-3">
               {!sidebarOpen && (
                 <Button
@@ -655,25 +745,17 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                 <div className="flex items-center gap-2">
                   <Avatar className="h-7 w-7">
                     <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                      {selectedAgent?.avatar ? (
-                        <img
-                          src={selectedAgent.avatar}
-                          alt={selectedAgent.name}
-                          className="h-7 w-7 rounded-full"
-                        />
-                      ) : (
-                        <Bot className="h-3.5 w-3.5" />
-                      )}
+                      <Bot className="h-3.5 w-3.5" />
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="text-sm font-medium">
-                      {selectedSession.title || selectedAgent?.name || t.chat.newChat}
+                      {selectedSession.title || selectedAgent?.name || 'New Chat'}
                     </p>
                     <div className="flex items-center gap-2">
                       {selectedAgent && (
                         <p className="text-[10px] text-muted-foreground">
-                          {selectedAgent.name} · {t.agentStatus[selectedAgent.status]}
+                          {selectedAgent.name}
                         </p>
                       )}
                       {lastModelInfo && (
@@ -715,15 +797,11 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                     ))}
                   </div>
                 ) : messages.length === 0 && !isStreaming ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
-                    <Hash className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {t.chat.noMessagesYet}
-                    </p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">
-                      {t.chat.noProviderHint}
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={Hash}
+                    title={t.chat.noMessagesYet}
+                    description={t.chat.noProviderHint}
+                  />
                 ) : (
                   <div className="space-y-4 max-w-3xl mx-auto">
                     {messages.map((msg) => (
@@ -732,9 +810,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                           message={msg}
                           isUser={msg.role === 'user'}
                           agentName={selectedAgent?.name}
-                          agentAvatar={selectedAgent?.avatar}
                         />
-                        {/* Token usage badge */}
                         {messageUsageMap[msg.id] && (
                           <div className="flex items-center gap-2 mt-1 ml-9">
                             <Tooltip>
@@ -763,20 +839,12 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                       </div>
                     ))}
 
-                    {/* Streaming response indicator */}
+                    {/* Streaming indicator */}
                     {isStreaming && (
                       <div className="flex gap-2.5 flex-row">
                         <Avatar className="h-7 w-7 shrink-0 mt-0.5">
                           <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                            {selectedAgent?.avatar ? (
-                              <img
-                                src={selectedAgent.avatar}
-                                alt={selectedAgent.name}
-                                className="h-7 w-7 rounded-full"
-                              />
-                            ) : (
-                              <Bot className="h-3.5 w-3.5" />
-                            )}
+                            <Bot className="h-3.5 w-3.5" />
                           </AvatarFallback>
                         </Avatar>
                         <div className="max-w-[75%] min-w-0 space-y-1">
@@ -817,28 +885,18 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                       </div>
                     )}
 
-                    {/* Thinking indicator (before streaming starts) */}
+                    {/* Pre-streaming thinking indicator */}
                     {sendingMessage && !isStreaming && (
                       <div className="flex gap-2.5 flex-row">
                         <Avatar className="h-7 w-7 shrink-0 mt-0.5">
                           <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                            {selectedAgent?.avatar ? (
-                              <img
-                                src={selectedAgent.avatar}
-                                alt={selectedAgent.name}
-                                className="h-7 w-7 rounded-full"
-                              />
-                            ) : (
-                              <Bot className="h-3.5 w-3.5" />
-                            )}
+                            <Bot className="h-3.5 w-3.5" />
                           </AvatarFallback>
                         </Avatar>
                         <div className="max-w-[75%] min-w-0 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium">
-                              {selectedAgent?.name || 'Agent'}
-                            </span>
-                          </div>
+                          <span className="text-xs font-medium">
+                            {selectedAgent?.name || 'Agent'}
+                          </span>
                           <div className="rounded-xl px-3.5 py-2.5 bg-muted rounded-tl-sm">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -855,7 +913,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
               </ScrollArea>
 
               {/* Input */}
-              <div className="border-t p-3">
+              <div className="border-t p-3 bg-background/95 backdrop-blur-sm">
                 <div className="flex items-start gap-2 max-w-3xl mx-auto">
                   <Textarea
                     ref={textareaRef}
@@ -864,7 +922,7 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                     onChange={handleTextareaChange}
                     onKeyDown={handleTextareaKeyDown}
                     disabled={sendingMessage}
-                    className="flex-1 min-h-[40px] max-h-[200px] resize-none rounded-xl"
+                    className="flex-1 min-h-[44px] max-h-[200px] resize-none rounded-xl"
                     rows={1}
                   />
                   <Button
@@ -886,22 +944,15 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center space-y-2">
-                <MessageSquare className="h-12 w-12 text-muted-foreground/20 mx-auto" />
-                <p className="text-sm text-muted-foreground">
-                  {t.chat.selectOrCreate}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowNewChatDialog(true)}
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  {t.chat.newChat}
-                </Button>
-              </div>
-            </div>
+            <EmptyState
+              icon={MessageSquare}
+              title={t.chat.selectOrCreate}
+              description={t.chat.startConversationWithAgent}
+              action={{
+                label: t.chat.newChat,
+                onClick: () => setShowNewChatDialog(true),
+              }}
+            />
           )}
         </div>
 
@@ -930,9 +981,6 @@ export default function ChatView({ workspaceId }: ChatViewProps) {
                         <span className="flex items-center gap-2">
                           <Bot className="h-3.5 w-3.5" />
                           {agent.name}
-                          <span className="text-[10px] text-muted-foreground">
-                            ({t.agentStatus[agent.status]})
-                          </span>
                         </span>
                       </SelectItem>
                     ))}

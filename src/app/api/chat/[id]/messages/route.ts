@@ -53,14 +53,13 @@ export async function POST(
       )
     }
 
-    if (!['user', 'agent', 'system'].includes(role)) {
+    if (!['user', 'assistant'].includes(role)) {
       return NextResponse.json(
-        { error: 'Role must be one of: user, agent, system' },
+        { error: 'Role must be one of: user, assistant' },
         { status: 400 }
       )
     }
 
-    // Verify session exists
     const session = await db().chatSession.findUnique({ where: { id } })
     if (!session) {
       return NextResponse.json(
@@ -77,15 +76,16 @@ export async function POST(
       },
     })
 
-    // Update session's unreadCount and title if it's the first user message
+    // Update session
     const updateData: Record<string, unknown> = { updatedAt: new Date() }
-    if (role === 'agent') {
+    if (role === 'assistant') {
       updateData.unreadCount = { increment: 1 }
     }
-    if (!session.title && role === 'user') {
-      // Auto-generate title from first user message
-      updateData.title =
-        content.length > 50 ? content.substring(0, 50) + '...' : content
+    if (!session.title || session.title === 'New Chat') {
+      if (role === 'user') {
+        updateData.title =
+          content.length > 50 ? content.substring(0, 50) + '...' : content
+      }
     }
 
     await db().chatSession.update({
@@ -93,7 +93,7 @@ export async function POST(
       data: updateData,
     })
 
-    // Notify realtime clients about the new message (fire and forget)
+    // Notify realtime clients (fire and forget)
     if (session.workspaceId) {
       notifyChatMessageReceived(session.workspaceId, id, {
         id: message.id,

@@ -1,9 +1,9 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
-// GET /api/skills/[id] - Get a single skill
+// GET /api/skills/[id] - Skill with files
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -11,10 +11,13 @@ export async function GET(
     const skill = await db().skill.findUnique({
       where: { id },
       include: {
+        files: {
+          orderBy: { path: 'asc' },
+        },
         agents: {
           include: {
             agent: {
-              select: { id: true, name: true, avatar: true, provider: true, status: true },
+              select: { id: true, name: true, provider: true, status: true, isArchived: true },
             },
           },
         },
@@ -35,7 +38,7 @@ export async function GET(
   }
 }
 
-// PUT /api/skills/[id] - Update a skill
+// PUT /api/skills/[id] - Update skill
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -45,15 +48,32 @@ export async function PUT(
     const body = await request.json()
     const { name, description, content, type, category, source } = body
 
+    const existing = await db().skill.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
+    }
+
+    if (name && name !== existing.name) {
+      const duplicate = await db().skill.findFirst({
+        where: { workspaceId: existing.workspaceId, name },
+      })
+      if (duplicate) {
+        return NextResponse.json(
+          { error: 'Skill with this name already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
     const skill = await db().skill.update({
       where: { id },
       data: {
-        ...(name !== undefined ? { name } : {}),
-        ...(description !== undefined ? { description: description || null } : {}),
-        ...(content !== undefined ? { content } : {}),
-        ...(type !== undefined ? { type: type || 'skill' } : {}),
-        ...(category !== undefined ? { category: category || null } : {}),
-        ...(source !== undefined ? { source: source || null } : {}),
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(content !== undefined && { content }),
+        ...(type !== undefined && { type }),
+        ...(category !== undefined && { category }),
+        ...(source !== undefined && { source }),
       },
     })
 
@@ -64,14 +84,23 @@ export async function PUT(
   }
 }
 
-// DELETE /api/skills/[id] - Delete a skill
+// DELETE /api/skills/[id] - Delete skill
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+
+    const existing = await db().skill.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
+    }
+
+    await db().skillFile.deleteMany({ where: { skillId: id } })
+    await db().agentSkill.deleteMany({ where: { skillId: id } })
     await db().skill.delete({ where: { id } })
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting skill:', error)
